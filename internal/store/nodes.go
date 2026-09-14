@@ -16,8 +16,10 @@ const (
 )
 
 // Node ist ein Ordner oder eine Transaktion. Children ist nur beim Baum gefüllt.
+// CustomerID nil bedeutet Allgemein; unter einem Ordner gilt dessen Kunde.
 type Node struct {
 	ID          int64   `json:"id"`
+	CustomerID  *int64  `json:"customer_id"`
 	ParentID    *int64  `json:"parent_id"`
 	Kind        string  `json:"kind"`
 	TCode       *string `json:"tcode"`
@@ -29,8 +31,10 @@ type Node struct {
 	Children    []*Node `json:"children,omitempty"`
 }
 
-// NodeInput sind die änderbaren Felder. Kind und ParentID zählen nur beim Anlegen.
+// NodeInput sind die änderbaren Felder. CustomerID, Kind und ParentID zählen
+// nur beim Anlegen; CustomerID nur, wenn kein ParentID angegeben ist.
 type NodeInput struct {
+	CustomerID  *int64  `json:"customer_id"`
 	ParentID    *int64  `json:"parent_id"`
 	Kind        string  `json:"kind"`
 	TCode       *string `json:"tcode"`
@@ -38,7 +42,7 @@ type NodeInput struct {
 	Description *string `json:"description"`
 }
 
-const nodeColumns = "id, parent_id, kind, tcode, title, description, sort_index, created_at, updated_at"
+const nodeColumns = "id, customer_id, parent_id, kind, tcode, title, description, sort_index, created_at, updated_at"
 
 const now = "strftime('%Y-%m-%dT%H:%M:%SZ', 'now')"
 
@@ -48,7 +52,7 @@ type querier interface {
 
 func scanNode(row interface{ Scan(...any) error }) (*Node, error) {
 	n := &Node{}
-	err := row.Scan(&n.ID, &n.ParentID, &n.Kind, &n.TCode, &n.Title, &n.Description,
+	err := row.Scan(&n.ID, &n.CustomerID, &n.ParentID, &n.Kind, &n.TCode, &n.Title, &n.Description,
 		&n.SortIndex, &n.CreatedAt, &n.UpdatedAt)
 	return n, err
 }
@@ -65,14 +69,15 @@ func (s *Store) Get(ctx context.Context, id int64) (*Node, error) {
 	return getNode(ctx, s.db, id)
 }
 
-// Count liefert die Anzahl aller Knoten.
-func (s *Store) Count(ctx context.Context) (int, error) {
+// Count liefert die Anzahl der Knoten eines Bereichs (nil = Allgemein).
+func (s *Store) Count(ctx context.Context, customerID *int64) (int, error) {
 	var n int
-	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM nodes").Scan(&n)
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM nodes WHERE customer_id IS ?", customerID).Scan(&n)
 	return n, err
 }
 
-// Tree liefert alle Knoten verschachtelt, sortiert nach sort_index.
+// Tree liefert alle Knoten aller Bereiche verschachtelt, sortiert nach sort_index.
+// Die oberste Ebene enthält Knoten verschiedener Bereiche (customer_id).
 func (s *Store) Tree(ctx context.Context) ([]*Node, error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT "+nodeColumns+" FROM nodes ORDER BY sort_index, id")
 	if err != nil {
@@ -143,43 +148,54 @@ func normalize(kind string, in *NodeInput) error {
 	return nil
 }
 
-// checkParent stellt sicher, dass der Parent existiert und ein Ordner ist.
-func checkParent(ctx context.Context, tx *sql.Tx, parentID *int64) error {
+func sameID(a, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// resolveScope ermittelt den Bereich eines Ziels. Unter einem Ordner gilt dessen
+// Kunde; ein abweichend angegebener Kunde ist ein Fehler. Oben gilt customerID.
+func resolveScope(ctx context.Context, tx *sql.Tx, parentID, customerID *int64) (*int64, error) {
 	if parentID == nil {
-		return nil
+		return customerID, checkCustomer(ctx, tx, customerID)
 	}
 	p, err := getNode(ctx, tx, *parentID)
 	if errors.Is(err, ErrNotFound) {
-		return fmt.Errorf("%w: Zielordner %d existiert nicht", ErrInvalid, *parentID)
+		return nil, fmt.Errorf("%w: Zielordner %d existiert nicht", ErrInvalid, *parentID)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if p.Kind != KindFolder {
-		return fmt.Errorf("%w: Ziel %d ist kein Ordner", ErrInvalid, *parentID)
+		return nil, fmt.Errorf("%w: Ziel %d ist kein Ordner", ErrInvalid, *parentID)
 	}
-	return nil
+	if customerID != nil && !sameID(customerID, p.CustomerID) {
+		return nil, fmt.Errorf("%w: Zielordner gehört zu einem anderen Kunden", ErrInvalid)
+	}
+	return p.CustomerID, nil
 }
 
-func nextSortIndex(ctx context.Context, tx *sql.Tx, parentID *int64) (int, error) {
+// levelWhere beschreibt eine Ebene: unter einem Ordner oder oben in einem Bereich.
+func levelWhere(parentID, customerID *int64) (string, []any) {
+	if parentID != nil {
+		return "parent_id = ?", []any{*parentID}
+	}
+	return "parent_id IS NULL AND customer_id IS ?", []any{customerID}
+}
+
+func nextSortIndex(ctx context.Context, tx *sql.Tx, parentID, customerID *int64) (int, error) {
+	where, args := levelWhere(parentID, customerID)
 	var next int
 	err := tx.QueryRowContext(ctx,
-		"SELECT COALESCE(MAX(sort_index), -1) + 1 FROM nodes WHERE parent_id IS ?", parentID).Scan(&next)
+		"SELECT COALESCE(MAX(sort_index), -1) + 1 FROM nodes WHERE "+where, args...).Scan(&next)
 	return next, err
 }
 
-// renumber vergibt sort_index 0..n-1 innerhalb eines Parents.
-func renumber(ctx context.Context, tx *sql.Tx, parentID *int64) error {
-	ids, err := childIDs(ctx, tx, parentID)
-	if err != nil {
-		return err
-	}
-	return setOrder(ctx, tx, parentID, ids)
-}
-
-func childIDs(ctx context.Context, tx *sql.Tx, parentID *int64) ([]int64, error) {
-	rows, err := tx.QueryContext(ctx,
-		"SELECT id FROM nodes WHERE parent_id IS ? ORDER BY sort_index, id", parentID)
+func childIDs(ctx context.Context, tx *sql.Tx, parentID, customerID *int64) ([]int64, error) {
+	where, args := levelWhere(parentID, customerID)
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM nodes WHERE "+where+" ORDER BY sort_index, id", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +212,7 @@ func childIDs(ctx context.Context, tx *sql.Tx, parentID *int64) ([]int64, error)
 }
 
 // setOrder hängt die Knoten in genau dieser Reihenfolge unter parentID.
+// Der Bereich (customer_id) bleibt unverändert.
 func setOrder(ctx context.Context, tx *sql.Tx, parentID *int64, ids []int64) error {
 	for i, id := range ids {
 		if _, err := tx.ExecContext(ctx,
@@ -206,6 +223,15 @@ func setOrder(ctx context.Context, tx *sql.Tx, parentID *int64, ids []int64) err
 	return nil
 }
 
+// renumber vergibt sort_index 0..n-1 innerhalb einer Ebene.
+func renumber(ctx context.Context, tx *sql.Tx, parentID, customerID *int64) error {
+	ids, err := childIDs(ctx, tx, parentID, customerID)
+	if err != nil {
+		return err
+	}
+	return setOrder(ctx, tx, parentID, ids)
+}
+
 // Create legt einen Knoten am Ende seiner Ebene an.
 func (s *Store) Create(ctx context.Context, in NodeInput) (*Node, error) {
 	if err := normalize(in.Kind, &in); err != nil {
@@ -213,16 +239,17 @@ func (s *Store) Create(ctx context.Context, in NodeInput) (*Node, error) {
 	}
 	var n *Node
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
-		if err := checkParent(ctx, tx, in.ParentID); err != nil {
+		scope, err := resolveScope(ctx, tx, in.ParentID, in.CustomerID)
+		if err != nil {
 			return err
 		}
-		idx, err := nextSortIndex(ctx, tx, in.ParentID)
+		idx, err := nextSortIndex(ctx, tx, in.ParentID, scope)
 		if err != nil {
 			return err
 		}
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO nodes (parent_id, kind, tcode, title, description, sort_index) VALUES (?, ?, ?, ?, ?, ?)",
-			in.ParentID, in.Kind, in.TCode, in.Title, in.Description, idx)
+			"INSERT INTO nodes (customer_id, parent_id, kind, tcode, title, description, sort_index) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			scope, in.ParentID, in.Kind, in.TCode, in.Title, in.Description, idx)
 		if err != nil {
 			return err
 		}
@@ -236,7 +263,7 @@ func (s *Store) Create(ctx context.Context, in NodeInput) (*Node, error) {
 	return n, err
 }
 
-// Update ändert T-Code, Titel und Beschreibung. Art und Position bleiben.
+// Update ändert T-Code, Titel und Beschreibung. Art, Bereich und Position bleiben.
 func (s *Store) Update(ctx context.Context, id int64, in NodeInput) (*Node, error) {
 	var n *Node
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
@@ -274,7 +301,7 @@ func (s *Store) Delete(ctx context.Context, id int64, children string) error {
 		if err != nil {
 			return err
 		}
-		kids, err := childIDs(ctx, tx, &id)
+		kids, err := childIDs(ctx, tx, &id, nil)
 		if err != nil {
 			return err
 		}
@@ -282,7 +309,7 @@ func (s *Store) Delete(ctx context.Context, id int64, children string) error {
 			return fmt.Errorf("%w: Ordner ist nicht leer – Inhalt hochziehen oder mitlöschen?", ErrConflict)
 		}
 
-		siblings, err := childIDs(ctx, tx, n.ParentID)
+		siblings, err := childIDs(ctx, tx, n.ParentID, n.CustomerID)
 		if err != nil {
 			return err
 		}
@@ -303,24 +330,27 @@ func (s *Store) Delete(ctx context.Context, id int64, children string) error {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM nodes WHERE id = ?", id); err != nil {
 			return err
 		}
-		return renumber(ctx, tx, n.ParentID)
+		return renumber(ctx, tx, n.ParentID, n.CustomerID)
 	})
 }
 
-// Move hängt einen Knoten ans Ende des Zielordners (nil = oberste Ebene).
-func (s *Store) Move(ctx context.Context, id int64, parentID *int64) (*Node, error) {
+// Move hängt einen Knoten ans Ende des Ziels: eines Ordners (parentID) oder der
+// obersten Ebene eines Bereichs (parentID nil, customerID nil = Allgemein).
+// Wechselt der Bereich, zieht der ganze Unterbaum mit.
+func (s *Store) Move(ctx context.Context, id int64, parentID, customerID *int64) (*Node, error) {
 	var n *Node
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
 		cur, err := getNode(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		if sameParent(cur.ParentID, parentID) {
+		scope, err := resolveScope(ctx, tx, parentID, customerID)
+		if err != nil {
+			return err
+		}
+		if sameID(cur.ParentID, parentID) && sameID(cur.CustomerID, scope) {
 			n = cur
 			return nil
-		}
-		if err := checkParent(ctx, tx, parentID); err != nil {
-			return err
 		}
 		if parentID != nil {
 			var inside bool
@@ -336,32 +366,35 @@ func (s *Store) Move(ctx context.Context, id int64, parentID *int64) (*Node, err
 				return fmt.Errorf("%w: ein Ordner kann nicht in sich selbst verschoben werden", ErrInvalid)
 			}
 		}
-		idx, err := nextSortIndex(ctx, tx, parentID)
+		idx, err := nextSortIndex(ctx, tx, parentID, scope)
 		if err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE nodes SET parent_id = ?, sort_index = ?, updated_at = "+now+" WHERE id = ?",
-			parentID, idx, id); err != nil {
+			"UPDATE nodes SET parent_id = ?, customer_id = ?, sort_index = ?, updated_at = "+now+" WHERE id = ?",
+			parentID, scope, idx, id); err != nil {
 			return err
 		}
-		if err := renumber(ctx, tx, cur.ParentID); err != nil {
+		if !sameID(cur.CustomerID, scope) {
+			if _, err := tx.ExecContext(ctx, `
+				WITH RECURSIVE sub(id) AS (
+					SELECT id FROM nodes WHERE parent_id = ?
+					UNION ALL SELECT n.id FROM nodes n JOIN sub ON n.parent_id = sub.id
+				)
+				UPDATE nodes SET customer_id = ? WHERE id IN (SELECT id FROM sub)`, id, scope); err != nil {
+				return err
+			}
+		}
+		if err := renumber(ctx, tx, cur.ParentID, cur.CustomerID); err != nil {
 			return err
 		}
-		if err := renumber(ctx, tx, parentID); err != nil {
+		if err := renumber(ctx, tx, parentID, scope); err != nil {
 			return err
 		}
 		n, err = getNode(ctx, tx, id)
 		return err
 	})
 	return n, err
-}
-
-func sameParent(a, b *int64) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
 }
 
 const (
@@ -385,7 +418,7 @@ func (s *Store) Reorder(ctx context.Context, id int64, direction string) error {
 		if err != nil {
 			return err
 		}
-		ids, err := childIDs(ctx, tx, n.ParentID)
+		ids, err := childIDs(ctx, tx, n.ParentID, n.CustomerID)
 		if err != nil {
 			return err
 		}
@@ -406,22 +439,26 @@ type ImportStats struct {
 	Transactions int `json:"transactions"`
 }
 
-// Import schreibt einen geparsten SAP-Baum. replace löscht vorher den Bestand,
-// sonst wird ans Ende der obersten Ebene angehängt.
-func (s *Store) Import(ctx context.Context, tree []*sapfile.TreeNode, replace bool) (ImportStats, error) {
+// Import schreibt einen geparsten SAP-Baum in einen Bereich (nil = Allgemein).
+// replace löscht vorher nur den Bestand dieses Bereichs, sonst wird ans Ende
+// seiner obersten Ebene angehängt.
+func (s *Store) Import(ctx context.Context, tree []*sapfile.TreeNode, customerID *int64, replace bool) (ImportStats, error) {
 	var stats ImportStats
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		if err := checkCustomer(ctx, tx, customerID); err != nil {
+			return err
+		}
 		if replace {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM nodes"); err != nil {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM nodes WHERE customer_id IS ?", customerID); err != nil {
 				return err
 			}
 		}
-		start, err := nextSortIndex(ctx, tx, nil)
+		start, err := nextSortIndex(ctx, tx, nil, customerID)
 		if err != nil {
 			return err
 		}
 		ins, err := tx.PrepareContext(ctx,
-			"INSERT INTO nodes (parent_id, kind, tcode, title, sort_index) VALUES (?, ?, ?, ?, ?)")
+			"INSERT INTO nodes (customer_id, parent_id, kind, tcode, title, sort_index) VALUES (?, ?, ?, ?, ?, ?)")
 		if err != nil {
 			return err
 		}
@@ -437,7 +474,7 @@ func (s *Store) Import(ctx context.Context, tree []*sapfile.TreeNode, replace bo
 				} else {
 					stats.Folders++
 				}
-				res, err := ins.ExecContext(ctx, parentID, string(t.Kind), tcode, t.Title, offset+i)
+				res, err := ins.ExecContext(ctx, customerID, parentID, string(t.Kind), tcode, t.Title, offset+i)
 				if err != nil {
 					return fmt.Errorf("Zeile %d: %w", t.Line, err)
 				}

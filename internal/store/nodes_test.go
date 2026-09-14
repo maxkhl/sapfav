@@ -26,7 +26,12 @@ func ptr[T any](v T) *T { return &v }
 
 func mustCreate(t *testing.T, s *Store, parent *int64, kind, tcode, title string) *Node {
 	t.Helper()
-	in := NodeInput{ParentID: parent, Kind: kind, Title: title}
+	return mustCreateIn(t, s, nil, parent, kind, tcode, title)
+}
+
+func mustCreateIn(t *testing.T, s *Store, customer, parent *int64, kind, tcode, title string) *Node {
+	t.Helper()
+	in := NodeInput{CustomerID: customer, ParentID: parent, Kind: kind, Title: title}
 	if tcode != "" {
 		in.TCode = &tcode
 	}
@@ -37,8 +42,14 @@ func mustCreate(t *testing.T, s *Store, parent *int64, kind, tcode, title string
 	return n
 }
 
-// order liefert die Titel der Kinder eines Parents in Reihenfolge.
+// order liefert die Titel einer Ebene in Reihenfolge und prüft sort_index 0..n-1.
+// Unter einem Ordner ist customer egal; oben bestimmt er den Bereich.
 func order(t *testing.T, s *Store, parent *int64) []string {
+	t.Helper()
+	return orderIn(t, s, nil, parent)
+}
+
+func orderIn(t *testing.T, s *Store, customer, parent *int64) []string {
 	t.Helper()
 	ids, err := func() ([]int64, error) {
 		tx, err := s.db.Begin()
@@ -46,12 +57,12 @@ func order(t *testing.T, s *Store, parent *int64) []string {
 			return nil, err
 		}
 		defer tx.Rollback()
-		return childIDs(ctx, tx, parent)
+		return childIDs(ctx, tx, parent, customer)
 	}()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var titles []string
+	titles := []string{}
 	for i, id := range ids {
 		n, err := s.Get(ctx, id)
 		if err != nil {
@@ -112,6 +123,7 @@ func TestCreateValidation(t *testing.T) {
 		{Kind: "link", Title: "falsche Art"},
 		{Kind: KindTx, TCode: ptr("SM37"), Title: "Parent ist Transaktion", ParentID: &tx.ID},
 		{Kind: KindTx, TCode: ptr("SM37"), Title: "Parent fehlt", ParentID: ptr[int64](999)},
+		{Kind: KindTx, TCode: ptr("SM37"), Title: "Kunde fehlt", CustomerID: ptr[int64](999)},
 	}
 	for _, in := range cases {
 		if _, err := s.Create(ctx, in); !errors.Is(err, ErrInvalid) {
@@ -154,17 +166,17 @@ func TestMoveAndReorder(t *testing.T) {
 	x := mustCreate(t, s, &a.ID, KindTx, "SE16", "x")
 	mustCreate(t, s, &b.ID, KindTx, "SM37", "y")
 
-	if _, err := s.Move(ctx, a.ID, &sub.ID); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Move(ctx, a.ID, &sub.ID, nil); !errors.Is(err, ErrInvalid) {
 		t.Errorf("Ordner in eigenen Unterordner: %v", err)
 	}
-	if _, err := s.Move(ctx, a.ID, &a.ID); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Move(ctx, a.ID, &a.ID, nil); !errors.Is(err, ErrInvalid) {
 		t.Errorf("Ordner in sich selbst: %v", err)
 	}
-	if _, err := s.Move(ctx, b.ID, &x.ID); !errors.Is(err, ErrInvalid) {
+	if _, err := s.Move(ctx, b.ID, &x.ID, nil); !errors.Is(err, ErrInvalid) {
 		t.Errorf("in Transaktion: %v", err)
 	}
 
-	if _, err := s.Move(ctx, sub.ID, &b.ID); err != nil {
+	if _, err := s.Move(ctx, sub.ID, &b.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := order(t, s, &a.ID); !equal(got, []string{"x"}) {
@@ -174,7 +186,7 @@ func TestMoveAndReorder(t *testing.T) {
 		t.Errorf("Ziel: %v", got)
 	}
 
-	if _, err := s.Move(ctx, x.ID, nil); err != nil {
+	if _, err := s.Move(ctx, x.ID, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := order(t, s, nil); !equal(got, []string{"A", "B", "x"}) {
@@ -237,6 +249,27 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func countTree(t *testing.T, s *Store) (folders, txs int) {
+	t.Helper()
+	tree, err := s.Tree(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var walk func([]*Node)
+	walk = func(level []*Node) {
+		for _, n := range level {
+			if n.Kind == KindFolder {
+				folders++
+			} else {
+				txs++
+			}
+			walk(n.Children)
+		}
+	}
+	walk(tree)
+	return
+}
+
 func TestImportRealExport(t *testing.T) {
 	data, err := os.ReadFile("../../testdata/sap-favorites-export.txt")
 	if err != nil {
@@ -249,44 +282,24 @@ func TestImportRealExport(t *testing.T) {
 	s := newStore(t)
 	mustCreate(t, s, nil, KindFolder, "", "Bestand")
 
-	count := func() (folders, txs int) {
-		tree, err := s.Tree(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var walk func([]*Node)
-		walk = func(level []*Node) {
-			for _, n := range level {
-				if n.Kind == KindFolder {
-					folders++
-				} else {
-					txs++
-				}
-				walk(n.Children)
-			}
-		}
-		walk(tree)
-		return
-	}
-
-	stats, err := s.Import(ctx, res.Tree(), false)
+	stats, err := s.Import(ctx, res.Tree(), nil, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if stats.Folders != 15 || stats.Transactions != 222 {
 		t.Errorf("stats %+v", stats)
 	}
-	if f, x := count(); f != 16 || x != 222 {
+	if f, x := countTree(t, s); f != 16 || x != 222 {
 		t.Errorf("nach append: %d Ordner, %d Transaktionen", f, x)
 	}
 	if top := order(t, s, nil); top[0] != "Bestand" || len(top) != 1+len(res.Tree()) {
 		t.Errorf("append nicht am Ende: %v", top)
 	}
 
-	if _, err := s.Import(ctx, res.Tree(), true); err != nil {
+	if _, err := s.Import(ctx, res.Tree(), nil, true); err != nil {
 		t.Fatal(err)
 	}
-	if f, x := count(); f != 15 || x != 222 {
+	if f, x := countTree(t, s); f != 15 || x != 222 {
 		t.Errorf("nach replace: %d Ordner, %d Transaktionen", f, x)
 	}
 

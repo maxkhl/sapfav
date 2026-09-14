@@ -22,6 +22,13 @@ func New(st *store.Store, log *slog.Logger) http.Handler {
 
 	mux.HandleFunc("GET /api/tree", s.tree)
 	mux.HandleFunc("GET /api/export", s.export)
+	mux.HandleFunc("GET /api/export/sap", s.sapExport)
+	mux.HandleFunc("GET /api/export/sap/preview", s.sapExportPreview)
+
+	mux.HandleFunc("GET /api/customers", s.customers)
+	mux.HandleFunc("POST /api/customers", requireJSON(s.createCustomer))
+	mux.HandleFunc("PUT /api/customers/{id}", requireJSON(s.updateCustomer))
+	mux.HandleFunc("DELETE /api/customers/{id}", requireJSON(s.deleteCustomer))
 
 	mux.HandleFunc("POST /api/nodes", requireJSON(s.createNode))
 	mux.HandleFunc("PUT /api/nodes/{id}", requireJSON(s.updateNode))
