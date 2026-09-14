@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SAP-Favoriten</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <h1>SAP-Favoriten</h1>
+  <input id="search" type="search" placeholder="Suchen: T-Code, Titel, Beschreibung  ( / )"
+         autocomplete="off" spellcheck="false" aria-label="Suche">
+  <nav class="toolbar">
+    <button type="button" id="new-tx">+ Transaktion</button>
+    <button type="button" id="new-folder">+ Ordner</button>
+    <button type="button" id="open-import">Import…</button>
+    <a class="button" href="/api/export">Export (JSON)</a>
+  </nav>
+</header>
+
+<main>
+  <p id="stats" class="stats"></p>
+  <div id="tree"></div>
+  <p id="empty" class="placeholder" hidden>Noch keine Einträge. Lege etwas an oder importiere deinen SAP-Export.</p>
+  <p id="nohits" class="placeholder" hidden>Keine Treffer.</p>
+</main>
+
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
+<dialog id="edit-dialog">
+  <form id="edit-form" method="dialog">
+    <h2 id="edit-heading"></h2>
+    <fieldset id="edit-kind" class="radios">
+      <legend>Art</legend>
+      <label><input type="radio" name="kind" value="tx"> Transaktion</label>
+      <label><input type="radio" name="kind" value="folder"> Ordner</label>
+    </fieldset>
+    <label id="edit-parent-label">Ablegen in
+      <select name="parent"></select>
+    </label>
+    <label id="edit-tcode-label">T-Code
+      <input name="tcode" autocomplete="off" spellcheck="false">
+    </label>
+    <label><span id="edit-title-caption">Kurztext</span>
+      <input name="title" autocomplete="off">
+    </label>
+    <label>Beschreibung
+      <textarea name="description" rows="6" placeholder="Wofür nutze ich das, Stolpersteine, Varianten …"></textarea>
+    </label>
+    <p class="error" hidden></p>
+    <div class="buttons">
+      <button value="cancel" formnovalidate>Abbrechen</button>
+      <button value="ok" class="primary">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="move-dialog">
+  <form id="move-form" method="dialog">
+    <h2>Verschieben</h2>
+    <p id="move-text"></p>
+    <label>Nach
+      <select name="parent"></select>
+    </label>
+    <p class="hint">Der Eintrag wird ans Ende des Zielordners gehängt.</p>
+    <p class="error" hidden></p>
+    <div class="buttons">
+      <button value="cancel" formnovalidate>Abbrechen</button>
+      <button value="ok" class="primary">Verschieben</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="delete-dialog">
+  <form id="delete-form" method="dialog">
+    <h2>Löschen</h2>
+    <p id="delete-text"></p>
+    <p class="error" hidden></p>
+    <div class="buttons" id="delete-buttons"></div>
+  </form>
+</dialog>
+
+<dialog id="import-dialog" class="wide">
+  <form id="import-form" method="dialog">
+    <h2>SAP-Favoriten importieren</h2>
+    <p class="hint">Textdatei aus dem Favoriten-Export von SAP Easy Access.
+      Erst wird nur eine Vorschau erzeugt, geschrieben wird nach Bestätigung.</p>
+    <label>Datei
+      <input type="file" name="file" required>
+    </label>
+    <label>Encoding
+      <select name="encoding">
+        <option value="cp1252" selected>cp1252 (Windows – SAP-Standard)</option>
+        <option value="utf-8">UTF-8</option>
+      </select>
+    </label>
+    <div class="buttons">
+      <button value="cancel" formnovalidate>Abbrechen</button>
+      <button value="preview">Vorschau</button>
+    </div>
+
+    <section id="import-preview" hidden>
+      <h3>Vorschau</h3>
+      <p id="import-summary"></p>
+      <details id="import-unparsable">
+        <summary></summary>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Zeile</th><th>Grund</th><th>Inhalt</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </details>
+      <details id="import-orphans">
+        <summary></summary>
+        <p class="hint">Diese Einträge werden auf die oberste Ebene gelegt.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Zeile</th><th>ID</th><th>Parent-ID</th><th>Grund</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </details>
+      <fieldset class="radios stacked">
+        <legend>Übernehmen</legend>
+        <label><input type="radio" name="mode" value="append" checked> An Bestand anhängen</label>
+        <label><input type="radio" name="mode" value="replace"> Bestand ersetzen <span id="import-existing" class="warn"></span></label>
+      </fieldset>
+      <div class="buttons">
+        <button value="import" class="primary">Importieren</button>
+      </div>
+    </section>
+    <p class="error" hidden></p>
+  </form>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -32,5 +32,7 @@ func New(st *store.Store, log *slog.Logger) http.Handler {
 	mux.HandleFunc("POST /api/import/preview", requireUpload(s.importPreview))
 	mux.HandleFunc("POST /api/import", requireUpload(s.importRun))
 
+	mux.Handle("GET /", staticHandler())
+
 	return mux
 }
