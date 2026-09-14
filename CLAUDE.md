@@ -15,7 +15,7 @@ SAP-Easy-Access-Favoritenliste). Läuft als Docker-Container im Homelab
 - Frontend: statisches HTML/CSS/Vanilla-JS per `go:embed`. Kein Build-Step,
   kein npm, keine CDN-Ressourcen (muss offline im LAN laufen).
 - Keine Authentifizierung, keine Sessions, keine User-Tabelle — das macht Authentik.
-- Statisch gelinkt (`CGO_ENABLED=0`), Laufzeitimage `distroless/static-debian12:nonroot`.
+- Statisch gelinkt (`CGO_ENABLED=0`), Laufzeitimage `gcr.io/distroless/static-debian13:nonroot`.
 - Lokale Toolchain liegt unter `~/.local/go` (Go 1.26.8). Mit `GOTOOLCHAIN=local`
   arbeiten, damit keine Abhängigkeit unbemerkt eine neuere Go-Version erzwingt
   als das Build-Image `golang:1.26` hat.

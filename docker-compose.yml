@@ -1,0 +1,19 @@
+services:
+  sapfav:
+    build: .
+    # Statt selbst zu bauen das fertige Image aus GHCR nehmen:
+    # image: ghcr.io/maxkhl/sapfav:latest
+    container_name: sapfav
+    restart: unless-stopped
+    environment:
+      SAPFAV_PORT: ${SAPFAV_PORT:-8000}
+      SAPFAV_DB: ${SAPFAV_DB:-/data/tcodes.db}
+    ports:
+      - "${SAPFAV_PORT:-8000}:${SAPFAV_PORT:-8000}"
+    volumes:
+      # Benanntes Volume: Docker übernimmt beim ersten Start die Rechte aus dem
+      # Image (Nutzer 65532). Für einen Bind-Mount siehe README.
+      - sapfav-data:/data
+
+volumes:
+  sapfav-data:
