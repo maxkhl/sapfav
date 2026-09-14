@@ -7,10 +7,10 @@ const $ = (sel, root = document) => root.querySelector(sel);
 function el(tag, attrs = {}, ...children) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
     if (k === 'class') e.className = v;
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else if (v === true) e.setAttribute(k, '');
-    else if (v !== false && v != null) e.setAttribute(k, v);
+    else e.setAttribute(k, v === true ? '' : v);
   }
   e.append(...children.filter(c => c != null));
   return e;
@@ -42,6 +42,12 @@ async function handle(res) {
   return res.status === 204 ? null : res.json();
 }
 
+function queryString(params) {
+  const q = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== ''));
+  const s = q.toString();
+  return s ? '?' + s : '';
+}
+
 let toastTimer;
 function toast(msg, isError = false) {
   const t = $('#toast');
@@ -58,40 +64,82 @@ function showError(form, err) {
   p.hidden = !err;
 }
 
+function fillTable(details, rows, summary) {
+  details.hidden = rows.length === 0;
+  details.open = false;
+  $('summary', details).textContent = summary;
+  $('tbody', details).replaceChildren(...rows.map(cells =>
+    el('tr', {}, ...cells.map(([text, cls]) => el('td', { class: cls }, String(text))))));
+}
+
 // ---------- Zustand ----------
 
 const EXPANDED_KEY = 'sapfav.expanded';
+const VIEW_KEY = 'sapfav.view';
+
+function loadSetting(key, fallback) {
+  try {
+    const v = localStorage.getItem(key);
+    return v == null ? fallback : JSON.parse(v);
+  } catch {
+    return fallback;
+  }
+}
+
+function saveSetting(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* ohne Speicher weiter */ }
+}
 
 const state = {
-  tree: [],
+  tree: [],            // oberste Ebene aller Bereiche, wie von /api/tree
+  customers: [],
   byId: new Map(),
-  expanded: new Set(),
+  roots: new Map(),    // Bereich ('g' oder Kunden-ID) -> oberste Ebene
+  counts: new Map(),   // Bereich -> { folders, tx }
+  expanded: new Set(loadSetting(EXPANDED_KEY, [])),
+  view: String(loadSetting(VIEW_KEY, 'all')), // 'all' | 'general' | Kunden-ID
   query: '',
 };
 
-try {
-  state.expanded = new Set(JSON.parse(localStorage.getItem(EXPANDED_KEY) || '[]'));
-} catch { /* ohne gespeicherten Zustand weiter */ }
+const saveExpanded = () => saveSetting(EXPANDED_KEY, [...state.expanded]);
+const scopeKey = customerId => (customerId == null ? 'g' : String(customerId));
+const customerById = id => state.customers.find(c => String(c.id) === String(id));
 
-function saveExpanded() {
-  try { localStorage.setItem(EXPANDED_KEY, JSON.stringify([...state.expanded])); } catch { /* egal */ }
+function setView(view, rerender = true) {
+  state.view = String(view);
+  saveSetting(VIEW_KEY, state.view);
+  $('#view').value = state.view;
+  if (rerender) render();
 }
 
 async function reload() {
   try {
-    state.tree = await api('GET', '/api/tree');
+    [state.tree, state.customers] = await Promise.all([api('GET', '/api/tree'), api('GET', '/api/customers')]);
   } catch (err) {
     toast('Laden fehlgeschlagen: ' + err.message, true);
     return;
   }
+  if (state.view !== 'all' && state.view !== 'general' && !customerById(state.view)) {
+    state.view = 'all';
+    saveSetting(VIEW_KEY, state.view);
+  }
   indexTree();
+  fillViewSelect();
   render();
+  if ($('#customers-dialog').open) renderCustomerList();
 }
 
-// indexTree ergänzt Verweise, die die Oberfläche braucht (Parent, Position, Anzahl).
+// indexTree gruppiert nach Bereich und ergänzt Verweise für die Oberfläche.
 function indexTree() {
   state.byId.clear();
-  const walk = (nodes, parent) => {
+  state.roots.clear();
+  state.counts.clear();
+  for (const n of state.tree) {
+    const key = scopeKey(n.customer_id);
+    if (!state.roots.has(key)) state.roots.set(key, []);
+    state.roots.get(key).push(n);
+  }
+  const walk = (nodes, parent, count) => {
     let tx = 0;
     nodes.forEach((n, i) => {
       n.children = n.children || [];
@@ -99,12 +147,45 @@ function indexTree() {
       n.index = i;
       n.siblings = nodes.length;
       state.byId.set(n.id, n);
-      n.txCount = n.kind === 'folder' ? walk(n.children, n) : 0;
-      tx += n.kind === 'folder' ? n.txCount : 1;
+      if (n.kind === 'folder') {
+        count.folders++;
+        n.txCount = walk(n.children, n, count);
+        tx += n.txCount;
+      } else {
+        count.tx++;
+        tx++;
+      }
     });
     return tx;
   };
-  walk(state.tree, null);
+  for (const [key, nodes] of state.roots) {
+    const count = { folders: 0, tx: 0 };
+    walk(nodes, null, count);
+    state.counts.set(key, count);
+  }
+}
+
+function allScopes() {
+  return [
+    { key: 'g', customerId: null, name: 'Allgemein', notes: null },
+    ...state.customers.map(c => ({ key: String(c.id), customerId: c.id, name: c.name, notes: c.notes })),
+  ];
+}
+
+function visibleScopes() {
+  const scopes = allScopes();
+  if (state.view === 'all') return scopes;
+  if (state.view === 'general') return scopes.slice(0, 1);
+  return scopes.filter(s => s.key === 'g' || s.key === state.view);
+}
+
+function fillViewSelect() {
+  $('#view').replaceChildren(
+    el('option', { value: 'all' }, 'Alle Kunden'),
+    el('option', { value: 'general' }, 'Nur Allgemein'),
+    ...state.customers.map(c => el('option', { value: String(c.id) }, c.name)),
+  );
+  $('#view').value = state.view;
 }
 
 // ---------- Suche ----------
@@ -116,6 +197,15 @@ function searchTerms() {
 function matches(n, terms) {
   const text = [n.tcode || '', n.title, n.description || ''].join('\n').toLowerCase();
   return terms.every(t => text.includes(t));
+}
+
+function countMatches(nodes, terms) {
+  let c = 0;
+  for (const n of nodes) {
+    if (matches(n, terms)) c++;
+    c += countMatches(n.children, terms);
+  }
+  return c;
 }
 
 // filterTree liefert die sichtbaren Knoten. Ohne Suchbegriffe gilt der
@@ -165,26 +255,49 @@ function highlight(text, terms) {
 
 function render() {
   const terms = searchTerms();
-  const items = filterTree(state.tree, terms);
-
   // Fokus über das Neuzeichnen retten (z. B. nach Hoch/Runter).
   const focusKey = document.activeElement?.dataset?.focus;
 
-  $('#tree').replaceChildren(renderList(items, terms));
-
-  const total = state.byId.size;
-  const folders = [...state.byId.values()].filter(n => n.kind === 'folder').length;
+  const sections = [];
+  let folders = 0;
+  let tx = 0;
   let hits = 0;
-  if (terms.length) {
-    for (const n of state.byId.values()) if (matches(n, terms)) hits++;
+  for (const scope of visibleScopes()) {
+    const nodes = state.roots.get(scope.key) || [];
+    const count = state.counts.get(scope.key) || { folders: 0, tx: 0 };
+    const items = filterTree(nodes, terms);
+    folders += count.folders;
+    tx += count.tx;
+    if (terms.length) {
+      hits += countMatches(nodes, terms);
+      if (!items.length) continue;
+    }
+    sections.push(renderScope(scope, count, items, terms));
   }
-  $('#stats').textContent = terms.length
-    ? `${hits} Treffer`
-    : total ? `${folders} Ordner · ${total - folders} Transaktionen` : '';
-  $('#empty').hidden = total > 0;
-  $('#nohits').hidden = !(total && terms.length && !items.length);
+
+  $('#tree').replaceChildren(...sections);
+  $('#stats').textContent = terms.length ? `${hits} Treffer` : `${folders} Ordner · ${tx} Transaktionen`;
+  $('#nohits').hidden = !(terms.length && !sections.length);
 
   if (focusKey) $(`[data-focus="${CSS.escape(focusKey)}"]`)?.focus();
+}
+
+function renderScope(scope, count, items, terms) {
+  const addTitle = `In „${scope.name}“ anlegen`;
+  return el('section', { class: 'scope' },
+    el('div', { class: 'scope-head' },
+      el('h2', {}, scope.name),
+      el('span', { class: 'count' }, `${count.tx} Transaktionen`),
+      el('div', { class: 'actions' },
+        el('button', {
+          type: 'button', title: addTitle, 'aria-label': addTitle, 'data-focus': `scope-${scope.key}:add`,
+          onclick: () => openEdit({ kind: 'tx', target: `top:${scope.key}` }),
+        }, '+'),
+      ),
+    ),
+    scope.notes ? el('p', { class: 'notes' }, scope.notes) : null,
+    items.length ? renderList(items, terms) : el('p', { class: 'placeholder' }, 'Noch keine Favoriten.'),
+  );
 }
 
 function renderList(items, terms) {
@@ -238,7 +351,7 @@ function renderActions(n) {
     el('button', { type: 'button', title, 'aria-label': title, 'data-focus': `${n.id}:${action}`, disabled, onclick }, label);
   const name = n.kind === 'tx' ? n.tcode : n.title;
   return el('div', { class: 'actions' },
-    n.kind === 'folder' ? btn('+', `In „${name}“ anlegen`, 'add', () => openEdit({ kind: 'tx', parentId: n.id })) : null,
+    n.kind === 'folder' ? btn('+', `In „${name}“ anlegen`, 'add', () => openEdit({ kind: 'tx', target: `f:${n.id}` })) : null,
     btn('↑', 'Nach oben', 'up', () => reorder(n, 'up'), n.index === 0),
     btn('↓', 'Nach unten', 'down', () => reorder(n, 'down'), n.index === n.siblings - 1),
     btn('⇥', 'Verschieben nach …', 'move', () => openMove(n)),
@@ -278,30 +391,52 @@ function legacyCopy(text) {
   if (!ok) throw new Error('copy failed');
 }
 
-// ---------- Ordnerauswahl ----------
+// ---------- Zielauswahl (Bereich oder Ordner) ----------
 
-// fillFolderSelect listet alle Ordner eingerückt; exclude blendet einen Ordner
-// samt Unterordnern aus (man kann nichts in sich selbst verschieben).
-function fillFolderSelect(select, { exclude = null, selected = null } = {}) {
-  select.replaceChildren(el('option', { value: '' }, 'Oberste Ebene'));
-  const walk = (nodes, depth) => {
-    for (const n of nodes) {
-      if (n.kind !== 'folder' || n.id === exclude) continue;
-      select.append(el('option', { value: n.id, selected: n.id === selected }, '   '.repeat(depth) + n.title));
-      walk(n.children, depth + 1);
-    }
-  };
-  walk(state.tree, 1);
+// Werte: "top:g" / "top:<Kunden-ID>" = oberste Ebene eines Bereichs, "f:<id>" = Ordner.
+// exclude blendet einen Ordner samt Unterordnern aus.
+function fillTargetSelect(select, { exclude = null, selected = 'top:g' } = {}) {
+  const groups = allScopes().map(scope => {
+    const group = el('optgroup', { label: scope.name },
+      el('option', { value: `top:${scope.key}` }, 'Oberste Ebene'));
+    const walk = (nodes, depth) => {
+      for (const n of nodes) {
+        if (n.kind !== 'folder' || n.id === exclude) continue;
+        group.append(el('option', { value: `f:${n.id}` }, '   '.repeat(depth) + n.title));
+        walk(n.children, depth + 1);
+      }
+    };
+    walk(state.roots.get(scope.key) || [], 1);
+    return group;
+  });
+  select.replaceChildren(...groups);
+  select.value = selected;
+  if (select.selectedIndex < 0) select.value = 'top:g';
 }
 
-const selectedParent = select => (select.value === '' ? null : Number(select.value));
+function parseTarget(value) {
+  const [type, id] = value.split(':');
+  if (type === 'f') return { parent_id: Number(id), customer_id: null };
+  return { parent_id: null, customer_id: id === 'g' ? null : Number(id) };
+}
+
+const targetOf = n => (n.parent ? `f:${n.parent.id}` : `top:${scopeKey(n.customer_id)}`);
+const defaultTarget = () => (customerById(state.view) ? `top:${state.view}` : 'top:g');
+
+function expandTarget(target) {
+  if (target.parent_id != null) {
+    state.expanded.add(target.parent_id);
+    saveExpanded();
+  }
+}
 
 // ---------- Anlegen / Bearbeiten ----------
 
-let editing = null; // { node } beim Bearbeiten, sonst null
+let editing = null; // Knoten beim Bearbeiten, sonst null
 
-function openEdit({ node = null, kind = 'tx', parentId = null }) {
+function openEdit({ node = null, kind = 'tx', target = defaultTarget() }) {
   const form = $('#edit-form');
+  const f = form.elements;
   editing = node;
   form.reset();
   showError(form, null);
@@ -310,28 +445,28 @@ function openEdit({ node = null, kind = 'tx', parentId = null }) {
     ? (node.kind === 'tx' ? 'Transaktion bearbeiten' : 'Ordner bearbeiten')
     : 'Neu anlegen';
   $('#edit-kind').hidden = !!node;
-  $('#edit-parent-label').hidden = !!node;
+  $('#edit-target-label').hidden = !!node;
 
   if (node) {
-    form.elements.tcode.value = node.tcode || '';
-    form.elements.title.value = node.title;
-    form.elements.description.value = node.description || '';
+    f.tcode.value = node.tcode || '';
+    f.title.value = node.title;
+    f.description.value = node.description || '';
     kind = node.kind;
   } else {
-    fillFolderSelect(form.elements.parent, { selected: parentId });
+    fillTargetSelect(f.target, { selected: target });
   }
-  form.elements.kind.value = kind;
+  f.kind.value = kind;
   updateEditKind();
   $('#edit-dialog').showModal();
-  (kind === 'tx' ? form.elements.tcode : form.elements.title).focus();
+  (kind === 'tx' ? f.tcode : f.title).focus();
 }
 
 function updateEditKind() {
-  const form = $('#edit-form');
-  const isTx = form.elements.kind.value === 'tx';
+  const f = $('#edit-form').elements;
+  const isTx = f.kind.value === 'tx';
   $('#edit-tcode-label').hidden = !isTx;
-  form.elements.tcode.required = isTx;
-  form.elements.title.required = !isTx;
+  f.tcode.required = isTx;
+  f.title.required = !isTx;
   $('#edit-title-caption').textContent = isTx ? 'Kurztext' : 'Ordnername';
 }
 
@@ -341,23 +476,20 @@ $('#edit-form').addEventListener('submit', async e => {
   if (e.submitter?.value !== 'ok') return;
   e.preventDefault();
   const form = e.target;
+  const f = form.elements;
   const body = {
-    tcode: form.elements.kind.value === 'tx' ? form.elements.tcode.value : null,
-    title: form.elements.title.value,
-    description: form.elements.description.value,
+    tcode: f.kind.value === 'tx' ? f.tcode.value : null,
+    title: f.title.value,
+    description: f.description.value,
   };
   try {
     let saved;
     if (editing) {
       saved = await api('PUT', `/api/nodes/${editing.id}`, body);
     } else {
-      body.kind = form.elements.kind.value;
-      body.parent_id = selectedParent(form.elements.parent);
-      saved = await api('POST', '/api/nodes', body);
-      if (body.parent_id != null) {
-        state.expanded.add(body.parent_id);
-        saveExpanded();
-      }
+      const target = parseTarget(f.target.value);
+      saved = await api('POST', '/api/nodes', { ...body, kind: f.kind.value, ...target });
+      expandTarget(target);
     }
     $('#edit-dialog').close();
     await reload();
@@ -376,22 +508,19 @@ function openMove(n) {
   moving = n;
   showError(form, null);
   $('#move-text').textContent = `„${n.kind === 'tx' ? n.tcode + ' – ' : ''}${n.title}“`;
-  fillFolderSelect(form.elements.parent, { exclude: n.kind === 'folder' ? n.id : null, selected: n.parent?.id ?? null });
+  fillTargetSelect(form.elements.target, { exclude: n.kind === 'folder' ? n.id : null, selected: targetOf(n) });
   $('#move-dialog').showModal();
-  form.elements.parent.focus();
+  form.elements.target.focus();
 }
 
 $('#move-form').addEventListener('submit', async e => {
   if (e.submitter?.value !== 'ok') return;
   e.preventDefault();
   const form = e.target;
-  const parentId = selectedParent(form.elements.parent);
+  const target = parseTarget(form.elements.target.value);
   try {
-    await api('POST', `/api/nodes/${moving.id}/move`, { parent_id: parentId });
-    if (parentId != null) {
-      state.expanded.add(parentId);
-      saveExpanded();
-    }
+    await api('POST', `/api/nodes/${moving.id}/move`, target);
+    expandTarget(target);
     $('#move-dialog').close();
     await reload();
   } catch (err) {
@@ -408,39 +537,141 @@ async function reorder(n, direction) {
   }
 }
 
-// ---------- Löschen ----------
+// ---------- Rückfragen ----------
+
+// openChoice zeigt eine Rückfrage mit Abbrechen und den angegebenen Aktionen.
+function openChoice({ title, text, choices }) {
+  const form = $('#choice-form');
+  showError(form, null);
+  $('#choice-title').textContent = title;
+  $('#choice-text').textContent = text;
+  const cancel = el('button', { value: 'cancel', formnovalidate: true }, 'Abbrechen');
+  const buttons = choices.map(c => el('button', {
+    type: 'button',
+    class: c.cls,
+    onclick: async () => {
+      try {
+        await c.run();
+        $('#choice-dialog').close();
+      } catch (err) {
+        showError(form, err);
+      }
+    },
+  }, c.label));
+  $('#choice-buttons').replaceChildren(cancel, ...buttons);
+  $('#choice-dialog').showModal();
+  cancel.focus();
+}
 
 function openDelete(n) {
-  const form = $('#delete-form');
-  showError(form, null);
   const label = n.kind === 'tx' ? `Transaktion „${n.tcode} – ${n.title}“` : `Ordner „${n.title}“`;
-  const buttons = [el('button', { value: 'cancel', formnovalidate: true }, 'Abbrechen')];
-
   const run = children => async () => {
-    try {
-      await api('DELETE', `/api/nodes/${n.id}`, children ? { children } : {});
-      $('#delete-dialog').close();
-      await reload();
-    } catch (err) {
-      showError(form, err);
-    }
+    await api('DELETE', `/api/nodes/${n.id}`, children ? { children } : {});
+    await reload();
   };
-
   if (n.kind === 'folder' && n.children.length) {
     const count = n.children.length;
-    $('#delete-text').textContent =
-      `${label} enthält ${count} ${count === 1 ? 'Eintrag' : 'Einträge'} direkt darunter. Was soll mit dem Inhalt passieren?`;
-    buttons.push(
-      el('button', { type: 'button', onclick: run('lift') }, 'Inhalt eine Ebene hoch'),
-      el('button', { type: 'button', class: 'danger', onclick: run('delete') }, 'Mit Inhalt löschen'),
-    );
+    openChoice({
+      title: 'Löschen',
+      text: `${label} enthält ${count} ${count === 1 ? 'Eintrag' : 'Einträge'} direkt darunter. Was soll mit dem Inhalt passieren?`,
+      choices: [
+        { label: 'Inhalt eine Ebene hoch', run: run('lift') },
+        { label: 'Mit Inhalt löschen', cls: 'danger', run: run('delete') },
+      ],
+    });
   } else {
-    $('#delete-text').textContent = `${label} löschen?`;
-    buttons.push(el('button', { type: 'button', class: 'primary', onclick: run(null) }, 'Löschen'));
+    openChoice({ title: 'Löschen', text: `${label} löschen?`, choices: [{ label: 'Löschen', cls: 'primary', run: run(null) }] });
   }
-  $('#delete-buttons').replaceChildren(...buttons);
-  $('#delete-dialog').showModal();
-  buttons[0].focus();
+}
+
+// ---------- Kunden ----------
+
+function renderCustomerList() {
+  const list = $('#customer-list');
+  if (!state.customers.length) {
+    list.replaceChildren(el('li', { class: 'placeholder' }, 'Noch keine Kunden angelegt.'));
+    return;
+  }
+  list.replaceChildren(...state.customers.map(c => el('li', {},
+    el('div', { class: 'customer-main' },
+      el('strong', {}, c.name),
+      el('span', { class: 'count' }, `${c.node_count} ${c.node_count === 1 ? 'Eintrag' : 'Einträge'}`),
+      c.notes ? el('div', { class: 'notes' }, c.notes) : null,
+    ),
+    el('div', { class: 'buttons' },
+      el('button', { type: 'button', onclick: () => { setView(c.id); $('#customers-dialog').close(); } }, 'Anzeigen'),
+      el('button', { type: 'button', onclick: () => openCustomerEdit(c) }, 'Bearbeiten'),
+      el('button', { type: 'button', class: 'danger', onclick: () => openCustomerDelete(c) }, 'Löschen'),
+    ),
+  )));
+}
+
+$('#open-customers').addEventListener('click', () => {
+  renderCustomerList();
+  $('#customers-dialog').showModal();
+});
+
+$('#new-customer').addEventListener('click', () => openCustomerEdit(null));
+
+let editingCustomer = null;
+
+function openCustomerEdit(c) {
+  const form = $('#customer-form');
+  editingCustomer = c;
+  form.reset();
+  showError(form, null);
+  $('#customer-heading').textContent = c ? 'Kunde bearbeiten' : 'Neuer Kunde';
+  if (c) {
+    form.elements.name.value = c.name;
+    form.elements.notes.value = c.notes || '';
+  }
+  $('#customer-dialog').showModal();
+  form.elements.name.focus();
+}
+
+$('#customer-form').addEventListener('submit', async e => {
+  if (e.submitter?.value !== 'ok') return;
+  e.preventDefault();
+  const form = e.target;
+  const body = { name: form.elements.name.value, notes: form.elements.notes.value };
+  try {
+    const saved = editingCustomer
+      ? await api('PUT', `/api/customers/${editingCustomer.id}`, body)
+      : await api('POST', '/api/customers', body);
+    $('#customer-dialog').close();
+    if (!editingCustomer) setView(saved.id, false); // neuen Kunden gleich anzeigen
+    await reload();
+  } catch (err) {
+    showError(form, err);
+  }
+});
+
+function openCustomerDelete(c) {
+  const run = nodes => async () => {
+    await api('DELETE', `/api/customers/${c.id}`, nodes ? { nodes } : {});
+    if (state.view === String(c.id)) setView('all', false);
+    await reload();
+  };
+  if (c.node_count) {
+    openChoice({
+      title: 'Kunde löschen',
+      text: `„${c.name}“ hat ${c.node_count} ${c.node_count === 1 ? 'Eintrag' : 'Einträge'}. Was soll damit passieren?`,
+      choices: [
+        { label: 'Nach Allgemein verschieben', run: run('general') },
+        { label: 'Mitlöschen', cls: 'danger', run: run('delete') },
+      ],
+    });
+  } else {
+    openChoice({ title: 'Kunde löschen', text: `„${c.name}“ löschen?`, choices: [{ label: 'Löschen', cls: 'primary', run: run(null) }] });
+  }
+}
+
+function fillCustomerSelect(select, selected) {
+  select.replaceChildren(
+    el('option', { value: '' }, 'Allgemein'),
+    ...state.customers.map(c => el('option', { value: String(c.id) }, c.name)),
+  );
+  select.value = selected == null ? '' : String(selected);
 }
 
 // ---------- Import ----------
@@ -454,20 +685,14 @@ function resetImportPreview() {
 
 $('#open-import').addEventListener('click', () => {
   importForm.reset();
+  fillCustomerSelect(importForm.elements.customer, customerById(state.view) ? state.view : null);
   resetImportPreview();
   $('#import-dialog').showModal();
 });
 
 importForm.elements.file.addEventListener('change', resetImportPreview);
 importForm.elements.encoding.addEventListener('change', resetImportPreview);
-
-function fillTable(details, rows, summary) {
-  details.hidden = rows.length === 0;
-  details.open = false;
-  $('summary', details).textContent = summary;
-  $('tbody', details).replaceChildren(...rows.map(cells =>
-    el('tr', {}, ...cells.map(([text, cls]) => el('td', { class: cls }, String(text))))));
-}
+importForm.elements.customer.addEventListener('change', resetImportPreview);
 
 importForm.addEventListener('submit', async e => {
   const action = e.submitter?.value;
@@ -475,6 +700,8 @@ importForm.addEventListener('submit', async e => {
   e.preventDefault();
 
   const data = new FormData(importForm);
+  const select = importForm.elements.customer;
+  const scopeName = select.options[select.selectedIndex]?.text ?? 'Allgemein';
   const buttonsBusy = busy => importForm.querySelectorAll('button').forEach(b => { b.disabled = busy; });
   showError(importForm, null);
   buttonsBusy(true);
@@ -492,18 +719,18 @@ importForm.addEventListener('submit', async e => {
         p.orphans.map(o => [[o.line], [o.id], [o.parent_id], [o.reason]]),
         `${p.orphans.length} Einträge mit Parent-ID ins Leere`);
       $('#import-existing').textContent = p.existing
-        ? `– löscht ${p.existing} bestehende Einträge`
+        ? `– löscht ${p.existing} bestehende Einträge in „${scopeName}“`
         : '';
       $('#import-preview').hidden = false;
     } else {
       const mode = data.get('mode');
-      if (mode === 'replace' && !confirm('Bestand wirklich ersetzen? Alle bisherigen Einträge samt Beschreibungen werden gelöscht.')) {
+      if (mode === 'replace' && !confirm(`Bestand von „${scopeName}“ wirklich ersetzen? Alle bisherigen Einträge dort werden samt Beschreibungen gelöscht.`)) {
         return;
       }
       const s = await upload('/api/import', data);
       $('#import-dialog').close();
       await reload();
-      toast(`Importiert: ${s.folders} Ordner, ${s.transactions} Transaktionen`);
+      toast(`Importiert nach „${scopeName}“: ${s.folders} Ordner, ${s.transactions} Transaktionen`);
     }
   } catch (err) {
     showError(importForm, err);
@@ -511,6 +738,57 @@ importForm.addEventListener('submit', async e => {
     buttonsBusy(false);
   }
 });
+
+// ---------- Export für SAP ----------
+
+const sapForm = $('#sap-form');
+let sapRequest = 0;
+
+// Werte: "g" = Allgemein, "c:<id>:1" = Kunde + Allgemein, "c:<id>:0" = nur Kunde.
+function sapQuery() {
+  const value = sapForm.elements.scope.value;
+  if (value === 'g') return '';
+  const [, id, withGeneral] = value.split(':');
+  return queryString({ customer: id, with_general: withGeneral === '1' ? '1' : null });
+}
+
+$('#open-sap-export').addEventListener('click', () => {
+  const select = sapForm.elements.scope;
+  select.replaceChildren(
+    el('option', { value: 'g' }, 'Allgemein'),
+    ...state.customers.flatMap(c => [
+      el('option', { value: `c:${c.id}:1` }, `${c.name} + Allgemein`),
+      el('option', { value: `c:${c.id}:0` }, `Nur ${c.name}`),
+    ]),
+  );
+  select.value = customerById(state.view) ? `c:${state.view}:1` : 'g';
+  $('#sap-dialog').showModal();
+  updateSapPreview();
+});
+
+sapForm.elements.scope.addEventListener('change', updateSapPreview);
+
+async function updateSapPreview() {
+  const request = ++sapRequest;
+  const q = sapQuery();
+  $('#sap-download').href = '/api/export/sap' + q;
+  showError(sapForm, null);
+  $('#sap-summary').textContent = 'Wird geprüft …';
+  $('#sap-warnings').hidden = true;
+  try {
+    const p = await api('GET', '/api/export/sap/preview' + q);
+    if (request !== sapRequest) return; // inzwischen anderer Inhalt gewählt
+    $('#sap-summary').textContent = `${p.folders} Ordner und ${p.transactions} Transaktionen → ${p.filename}`;
+    fillTable($('#sap-warnings'),
+      p.warnings.map(w => [[w.tcode || '–'], [w.title], [w.reason]]),
+      `${p.warnings.length} ${p.warnings.length === 1 ? 'Eintrag' : 'Einträge'} nicht verlustfrei exportierbar`);
+    $('#sap-warnings').open = p.warnings.length > 0;
+  } catch (err) {
+    if (request !== sapRequest) return;
+    $('#sap-summary').textContent = '';
+    showError(sapForm, err);
+  }
+}
 
 // ---------- Kopfzeile, Tastatur ----------
 
@@ -521,6 +799,7 @@ search.addEventListener('input', () => {
   render();
 });
 
+$('#view').addEventListener('change', e => setView(e.target.value));
 $('#new-tx').addEventListener('click', () => openEdit({ kind: 'tx' }));
 $('#new-folder').addEventListener('click', () => openEdit({ kind: 'folder' }));
 

@@ -10,20 +10,22 @@
 
 <header class="topbar">
   <h1>SAP-Favoriten</h1>
+  <select id="view" aria-label="Ansicht"></select>
   <input id="search" type="search" placeholder="Suchen: T-Code, Titel, Beschreibung  ( / )"
          autocomplete="off" spellcheck="false" aria-label="Suche">
   <nav class="toolbar">
     <button type="button" id="new-tx">+ Transaktion</button>
     <button type="button" id="new-folder">+ Ordner</button>
+    <button type="button" id="open-customers">Kunden…</button>
     <button type="button" id="open-import">Import…</button>
-    <a class="button" href="/api/export">Export (JSON)</a>
+    <button type="button" id="open-sap-export">Export für SAP…</button>
+    <a class="button" href="/api/export">Backup (JSON)</a>
   </nav>
 </header>
 
 <main>
   <p id="stats" class="stats"></p>
   <div id="tree"></div>
-  <p id="empty" class="placeholder" hidden>Noch keine Einträge. Lege etwas an oder importiere deinen SAP-Export.</p>
   <p id="nohits" class="placeholder" hidden>Keine Treffer.</p>
 </main>
 
@@ -37,8 +39,8 @@
       <label><input type="radio" name="kind" value="tx"> Transaktion</label>
       <label><input type="radio" name="kind" value="folder"> Ordner</label>
     </fieldset>
-    <label id="edit-parent-label">Ablegen in
-      <select name="parent"></select>
+    <label id="edit-target-label">Ablegen in
+      <select name="target"></select>
     </label>
     <label id="edit-tcode-label">T-Code
       <input name="tcode" autocomplete="off" spellcheck="false">
@@ -62,9 +64,9 @@
     <h2>Verschieben</h2>
     <p id="move-text"></p>
     <label>Nach
-      <select name="parent"></select>
+      <select name="target"></select>
     </label>
-    <p class="hint">Der Eintrag wird ans Ende des Zielordners gehängt.</p>
+    <p class="hint">Der Eintrag wird ans Ende des Ziels gehängt. Ordner nehmen ihren Inhalt mit, auch zu einem anderen Kunden.</p>
     <p class="error" hidden></p>
     <div class="buttons">
       <button value="cancel" formnovalidate>Abbrechen</button>
@@ -73,12 +75,40 @@
   </form>
 </dialog>
 
-<dialog id="delete-dialog">
-  <form id="delete-form" method="dialog">
-    <h2>Löschen</h2>
-    <p id="delete-text"></p>
+<dialog id="choice-dialog">
+  <form id="choice-form" method="dialog">
+    <h2 id="choice-title"></h2>
+    <p id="choice-text"></p>
     <p class="error" hidden></p>
-    <div class="buttons" id="delete-buttons"></div>
+    <div class="buttons" id="choice-buttons"></div>
+  </form>
+</dialog>
+
+<dialog id="customers-dialog">
+  <form id="customers-form" method="dialog">
+    <h2>Kunden</h2>
+    <ul id="customer-list" class="customer-list"></ul>
+    <div class="buttons">
+      <button value="close">Schließen</button>
+      <button type="button" id="new-customer" class="primary">+ Neuer Kunde</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="customer-dialog">
+  <form id="customer-form" method="dialog">
+    <h2 id="customer-heading"></h2>
+    <label>Name
+      <input name="name" autocomplete="off" required>
+    </label>
+    <label>Notizen
+      <textarea name="notes" rows="4" placeholder="Systeme, Mandanten, Ansprechpartner …"></textarea>
+    </label>
+    <p class="error" hidden></p>
+    <div class="buttons">
+      <button value="cancel" formnovalidate>Abbrechen</button>
+      <button value="ok" class="primary">Speichern</button>
+    </div>
   </form>
 </dialog>
 
@@ -90,12 +120,17 @@
     <label>Datei
       <input type="file" name="file" required>
     </label>
-    <label>Encoding
-      <select name="encoding">
-        <option value="cp1252" selected>cp1252 (Windows – SAP-Standard)</option>
-        <option value="utf-8">UTF-8</option>
-      </select>
-    </label>
+    <div class="fields">
+      <label>Encoding
+        <select name="encoding">
+          <option value="cp1252" selected>cp1252 (Windows – SAP-Standard)</option>
+          <option value="utf-8">UTF-8</option>
+        </select>
+      </label>
+      <label>Importieren nach
+        <select name="customer"></select>
+      </label>
+    </div>
     <div class="buttons">
       <button value="cancel" formnovalidate>Abbrechen</button>
       <button value="preview">Vorschau</button>
@@ -129,6 +164,32 @@
       </div>
     </section>
     <p class="error" hidden></p>
+  </form>
+</dialog>
+
+<dialog id="sap-dialog" class="wide">
+  <form id="sap-form" method="dialog">
+    <h2>Export für SAP</h2>
+    <p class="hint">Erzeugt eine Datei im Format des SAP-Favoriten-Exports (cp1252).
+      In SAP Easy Access über <b>Favoriten → Hochladen vom PC</b> einspielen –
+      vorher die aktuellen Favoriten sichern. Beschreibungen haben in SAP kein Feld
+      und werden nicht exportiert.</p>
+    <label>Inhalt
+      <select name="scope"></select>
+    </label>
+    <p id="sap-summary"></p>
+    <details id="sap-warnings">
+      <summary></summary>
+      <div class="table-wrap"><table>
+        <thead><tr><th>T-Code</th><th>Kurztext</th><th>Hinweis</th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+    </details>
+    <p class="error" hidden></p>
+    <div class="buttons">
+      <button value="close">Schließen</button>
+      <a id="sap-download" class="button primary" href="/api/export/sap">Herunterladen</a>
+    </div>
   </form>
 </dialog>
 
