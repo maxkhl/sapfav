@@ -1,4 +1,4 @@
-package sapimport
+package sapfile
 
 import (
 	"os"

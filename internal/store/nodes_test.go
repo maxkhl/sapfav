@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/maxkhl/sapfav/internal/sapimport"
+	"github.com/maxkhl/sapfav/internal/sapfile"
 )
 
 var ctx = context.Background()
@@ -242,7 +242,7 @@ func TestImportRealExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := sapimport.Parse(data, sapimport.EncodingCP1252)
+	res, err := sapfile.Parse(data, sapfile.EncodingCP1252)
 	if err != nil {
 		t.Fatal(err)
 	}

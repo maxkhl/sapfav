@@ -1,4 +1,4 @@
-// Package sapimport liest den Favoriten-Export aus SAP Easy Access.
+// Package sapfile liest und schreibt das Favoriten-Dateiformat von SAP Easy Access.
 //
 // Format: eine Zeile je Knoten, feste Spalten (nach dem Dekodieren, in Zeichen):
 //
@@ -9,7 +9,7 @@
 //	60-    Kurztext
 //
 // Die Hierarchie steckt ausschließlich in den IDs.
-package sapimport
+package sapfile
 
 import (
 	"bytes"

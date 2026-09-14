@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/maxkhl/sapfav/internal/sapimport"
+	"github.com/maxkhl/sapfav/internal/sapfile"
 )
 
 const (
@@ -408,7 +408,7 @@ type ImportStats struct {
 
 // Import schreibt einen geparsten SAP-Baum. replace löscht vorher den Bestand,
 // sonst wird ans Ende der obersten Ebene angehängt.
-func (s *Store) Import(ctx context.Context, tree []*sapimport.TreeNode, replace bool) (ImportStats, error) {
+func (s *Store) Import(ctx context.Context, tree []*sapfile.TreeNode, replace bool) (ImportStats, error) {
 	var stats ImportStats
 	err := s.inTx(ctx, func(tx *sql.Tx) error {
 		if replace {
@@ -427,11 +427,11 @@ func (s *Store) Import(ctx context.Context, tree []*sapimport.TreeNode, replace 
 		}
 		defer ins.Close()
 
-		var insert func(level []*sapimport.TreeNode, parentID *int64, offset int) error
-		insert = func(level []*sapimport.TreeNode, parentID *int64, offset int) error {
+		var insert func(level []*sapfile.TreeNode, parentID *int64, offset int) error
+		insert = func(level []*sapfile.TreeNode, parentID *int64, offset int) error {
 			for i, t := range level {
 				var tcode *string
-				if t.Kind == sapimport.KindTx {
+				if t.Kind == sapfile.KindTx {
 					tcode = &t.TCode
 					stats.Transactions++
 				} else {

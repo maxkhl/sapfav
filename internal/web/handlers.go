@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/maxkhl/sapfav/internal/sapimport"
+	"github.com/maxkhl/sapfav/internal/sapfile"
 	"github.com/maxkhl/sapfav/internal/store"
 )
 
@@ -195,7 +195,7 @@ func (s *server) reorderNode(w http.ResponseWriter, r *http.Request) {
 }
 
 // parseUpload liest Datei und Encoding aus dem Multipart-Formular und parst sie.
-func (s *server) parseUpload(w http.ResponseWriter, r *http.Request) (*sapimport.Result, bool) {
+func (s *server) parseUpload(w http.ResponseWriter, r *http.Request) (*sapfile.Result, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBody)
 	if err := r.ParseMultipartForm(maxUploadBody); err != nil {
 		writeError(w, http.StatusBadRequest, "Upload fehlerhaft oder größer als 2 MB")
@@ -212,7 +212,7 @@ func (s *server) parseUpload(w http.ResponseWriter, r *http.Request) (*sapimport
 		writeError(w, http.StatusBadRequest, "Datei nicht lesbar")
 		return nil, false
 	}
-	res, err := sapimport.Parse(data, r.FormValue("encoding"))
+	res, err := sapfile.Parse(data, r.FormValue("encoding"))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return nil, false
