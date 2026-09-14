@@ -1,0 +1,5 @@
+/sapfav
+*.db
+*.db-shm
+*.db-wal
+.env

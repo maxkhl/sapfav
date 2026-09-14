@@ -1,0 +1,237 @@
+TR0000100324/SCWM/MON                                       Lagerverwaltungsmonitor                                                                                                             
+TR0000100323CG3Y                                            Datei herunterladen                                                                                                                 
+TR0000100318CO09                                            Verfügbarkeitsübersicht                                                                                                             
+  0000100311                                                Case                                                                                                                                
+TR0000100307VOFM                                            Konfiguration Bedingungen, Formeln                                                                                                  
+TR0000100302SICF                                            Pflege des HTTP-Service-Baums                                                                                                       
+TR0000100300RSRT                                            Start des Berichtsmonitors                                                                                                          
+TR0000100294ME6H                                            Standardanalyse Lieferantenbeurtlng.                                                                                                
+TR0000100293ME6F                                            Drucken                                                                                                                             
+TR0000100292ME6G                                            Lieferantenbeurteilung im Hintergr.                                                                                                 
+TR0000100291ME61                                            Pflegen Lieferantenbeurteilung                                                                                                      
+TR0000100290ANST                                            Automatisierte Hinweissuche 1818192                                                                                                 
+TR0000100286/IWFND/MAINT_SERVICE                            Services aktivieren und verwalten                                                                                                   
+TR0000100284ZSD084                                          Case Kalkulation Cockpit                                                                                                            
+  0000100279                                                Auftragsabwicklung                                                                                                                  
+TR0000100278SEGW                                            Transaktion SEGW                                                                                                                    
+TR0000100277CS03                                            Anzeigen Materialstückliste                                                                                                         
+  0000100273                                                FIS CASH                                                                                                                            
+TR0000100272ME61                                            Pflegen Lieferantenbeurteilung                                                                                                      
+TR0000100268SU53                                            Auswertung der Berechtigungspüfung                                                                                                  
+TR0000100267VOFM                                            Konfiguration Bedingungen, Formeln                                                                                                  
+TR0000100266VTAA                                            Kopiersteuerung Auftrag nach Auftrag                                                                                                
+TR0000100265OMJJ                                            Customizing Neue Bewegungsarten                                                                                                     
+TR0000100263UKM_CASE                                        Fälle im SAP Credit Management                                                                                                      
+TR0000100262MSC2N                                           Charge ändern                                                                                                                       
+TR0000100260VTAA                                            Kopiersteuerung Auftrag nach Auftrag                                                                                                
+TR0000100259VOFM                                            Konfiguration Bedingungen, Formeln                                                                                                  
+TR0000100258SLXT                                            Übersetzungstransport                                                                                                               
+TR0000100257ZSD075                                          Simulation Case Kalkulation                                                                                                         
+TR0000100253ZSD068                                          Kompaktanzeige Kundenaufträge                                                                                                       
+TR0000100248ZSD064                                          Massenänderung Konditionen                                                                                                          
+TR0000100247VA03                                            Kundenauftrag anzeigen                                                                                                              
+TR0000100245ZMM002                                          Artikel Kompaktanzeige                                                                                                              
+TR0000100244VA06                                            Kundenauftragsmonitor                                                                                                               
+TR0000100241ZSD059                                          Kundenspez. Customizing Kundenstamm                                                                                                 
+TR0000100236ZSD051                                          Tagesumsatz                                                                                                                         
+TR0000100235ME23N                                           Bestellung anzeigen                                                                                                                 
+TR0000100234ME21N                                           Bestellung anlegen                                                                                                                  
+TR0000100233ZMM019                                          Dispoliste                                                                                                                          
+TR0000100231CT04                                            Merkmalverwaltung                                                                                                                   
+TR0000100230ZSD042                                          ITX Trackingdaten                                                                                                                   
+TR0000100229ZSD015                                          ADM-Hierarchie                                                                                                                      
+TR0000100227ZMM_VARO_SATZ_DRUCK                             VARO Etikettensätze Drucken                                                                                                         
+TR0000100225SQ01                                            SAP Query: Queries pflegen                                                                                                          
+TR0000100223VFBS                                            Folgebildsteuerung                                                                                                                  
+TR0000100222VL31N                                           Anlieferung anlegen                                                                                                                 
+TR0000100218ZMM009                                          Konzernstücklistensync Abarbeitung                                                                                                  
+TR0000100217ZMM008                                          Sprechende Artikelnummer Simulieren                                                                                                 
+TR0000100215VL31N                                           Anlieferung anlegen                                                                                                                 
+TR0000100214CS09                                            Anzeigen Werkszuordnung MaterialStl                                                                                                 
+TR0000100213CS02                                            Ändern Materialstückliste                                                                                                           
+TR0000100212ZSD020                                          Präferenz Ausschluss Massenupload                                                                                                   
+TR0000100211ZSD019                                          Wunsch VPE Massenupload                                                                                                             
+TR0000100199ZSD008                                          Geschäftspartner Massenupload                                                                                                       
+TR0000100206ZSD009                                          Gesch.partner Upload Customizing                                                                                                    
+TR0000100202ZSD004                                          VBU Cockpit                                                                                                                         
+TR0000100201ZMM002                                          Artikel Kompaktanzeige                                                                                                              
+TR0000100200ZMM007                                          EK Masterliste                                                                                                                      
+TR0000100198ZSD007                                          Konditionsupload Angebot 4.0                                                                                                        
+TR0000100197VDH2N                                           Anzeige Kundenhierarchie                                                                                                            
+TR0000100195ZSD006                                          VBU-Cockpit Kundenpflege                                                                                                            
+TR0000100193ZSD004                                          VBU Cockpit                                                                                                                         
+TR0000100175SWO1                                            Business Object Builder                                                                                                             
+  0000100186                                                Etikettendruck                                                                                                                      
+  0000100184                                                Disposition                                                                                                                         
+TR0000100178VK13                                            Anzeigen Kondition                                                                                                                  
+TR0000100243MEK3                                            Konditionen anzeigen (Einkauf)                                                                                                      
+TR0000100177ZMM002                                          Artikel Kompaktanzeige                                                                                                              
+TR0000100176VDH1N                                           Anzeige/Pflege Kundenhierarchie                                                                                                     
+TR0000100171SECATT                                          Extended Computer Aided Test Tool                                                                                                   
+TR0000100170ZME21KTN                                        Bestellung - Expressumlagerung KTN                                                                                                  
+TR0000100169VA02                                            Kundenauftrag ändern                                                                                                                
+TR0000100167ME21N                                           Bestellung anlegen                                                                                                                  
+TR0000100164ZSD001                                          Konditionen ermitteln & pflegen                                                                                                     
+  0000100149                                                Debug/Trace                                                                                                                         
+TR0000100086BP                                              Geschäftspartner bearbeiten                                                                                                         
+TR0000100087SE16T                                           Einstieg Suchfunktionen                                                                                                             
+TR0000100088ZMM001                                          Material - EAN Anzeigen/Ändern                                                                                                      
+  0000100089                                                Sollvorgaben                                                                                                                        
+TR0000100090ZSD02                                           Sollvorgaben pflegen                                                                                                                
+  0000100091                                                Admin                                                                                                                               
+  0000100092                                                BW                                                                                                                                  
+  0000100093                                                Entwicklung                                                                                                                         
+TR0000100095VK33                                            Konditionspflege: Anzeigen                                                                                                          
+TR0000100096YMM_MVER                                        Verbrauchsfortschreibung anzeigen                                                                                                   
+TR0000100097ME13                                            Infosatz anzeigen                                                                                                                   
+TR0000100098MM02                                            Material & ändern                                                                                                                   
+TR0000100099MM03                                            Material & anzeigen                                                                                                                 
+TR0008900146Y_SOLLV_FC                                      Pflege Sollvorgabe FC                                                                                                               
+TR0008900147Y_SOLLV_TVK                                     Pflege Sollvorgabe TVK                                                                                                              
+TR0008900148Y_SOLLV_ADM                                     Pflege Sollvorgabe ADM                                                                                                              
+TR0009100310SM59                                            RFC-Destinations (Anzeige u. Pflege)                                                                                                
+TR0009100309SM02                                            System-Nachrichten                                                                                                                  
+TR0009100298SU53                                            Auswertung der Berechtigungspüfung                                                                                                  
+TR0009100296KCA0                                            SAP-EIS: Aspekt bearbeiten                                                                                                          
+TR0009100289SM04                                            Anmeldungen an einer AS-Instanz                                                                                                     
+TR0009100288STRUST                                          Trust-Manager                                                                                                                       
+TR0009100271SCC4                                            Mandantenverwaltung                                                                                                                 
+TR0009100269/SDF/TRCHECK                                    Transportaufträge prüfen                                                                                                            
+TR0009100251SBGRFCPERFMON                                   Performance Monitor bgRFC                                                                                                           
+TR0009100250SBGRFCMON                                       bgRFC Monitor                                                                                                                       
+TR0009100249WLF_IDOC                                        IDoc-Verarbeitung                                                                                                                   
+TR0009100240RZ10                                            Pflege von Profilparametern                                                                                                         
+  0009100237                                                IDOC                                                                                                                                
+TR0009100228CG3Y                                            Datei herunterladen                                                                                                                 
+TR0009100224SM04                                            Anmeldungen an einer AS-Instanz                                                                                                     
+TR0009100221CUNI                                            Maßeinheiten                                                                                                                        
+TR0009100219SUIM                                            Benutzerinformationssystem                                                                                                          
+TR0009100210DBACOCKPIT                                      DBA Cockpit starten                                                                                                                 
+TR0009100172SOST                                            SAPconnect Sendeaufträge                                                                                                            
+TR0009100114SE03                                            Transport Organizer Tools                                                                                                           
+TR0009100115SM65                                            Analysetool Hintergrundverarbeitung                                                                                                 
+TR0009100116AL11                                            Display SAP-Directories                                                                                                             
+TR0009100117SM37                                            Übersicht über Jobauswahl                                                                                                           
+TR0009100118SM35                                            Batch-Input Monitoring                                                                                                              
+TR0009100119RZ20                                            CCMS Monitoring                                                                                                                     
+TR0009100120ST22                                            ABAP Dumpanalyse                                                                                                                    
+TR0009100121SM13                                            Verbuchungssätze administrieren                                                                                                     
+TR0009100122SM51                                            Gestartete AS-Instanzen                                                                                                             
+TR0009200209OLI8BW                                          Neuaufbau VIS Extr.str. Lieferung                                                                                                   
+TR0009200208LBWG                                            Löschen der neuaufgebauten BW-Daten                                                                                                 
+TR0009200207LBWE                                            LO-Datenextr.: Customizing Cockpit                                                                                                  
+TR0009200196CTBW                                            Tabellenpfleg für BW und Klassen                                                                                                    
+TR0009200181RSA6                                            DataSources pflegen                                                                                                                 
+TR0009200180RSA3                                            Extraktorchecker                                                                                                                    
+TR0009200179RSO2                                            Oltp Metadaten Repository                                                                                                           
+TR0009200174RSA6                                            DataSources pflegen                                                                                                                 
+TR0009200123RSZDELETE                                       Query Löschen                                                                                                                       
+TR0009200124RSRV                                            Bw Objektreparatur                                                                                                                  
+TR0009200125SFW5                                            Switch Framework                                                                                                                    
+TR0009200126BSANLY_BI_ACTIVATION                            BI Content aktivieren                                                                                                               
+TR0009200127SM59                                            RCF Pflege                                                                                                                          
+TR0009200128RSREQREDUCE                                     Request Reduktion                                                                                                                   
+TR0009200129RSD1                                            Merkmalpflege                                                                                                                       
+TR0009200130QCHECK                                          Query Prüfen                                                                                                                        
+TR0009200131RRMXP                                           Excel Start                                                                                                                         
+TR0009200132SBIW                                            BW Aufgaben                                                                                                                         
+TR0009200133RAAOE                                           Analysis starten                                                                                                                    
+TR0009200134RSRT                                            Berichtsmonitor                                                                                                                     
+TR0009200135RSA5                                            Business Content installieren                                                                                                       
+TR0009200136GS01                                            Set Anlegen                                                                                                                         
+TR0009200137RSKC                                            Pflege erlaubter Zeichen                                                                                                            
+TR0009200138RS02                                            Metadaten Repository                                                                                                                
+TR0009200139BW07                                            SET-Hierarchien                                                                                                                     
+TR0009200140RSA1                                            Haupttransaktion                                                                                                                    
+TR0009200141EDPP1                                           EDI Partnervereinbarung (Tabelle)                                                                                                   
+TR0009200142RSBBS                                           Sender Empfänger Pflege                                                                                                             
+TR0009200143RSRTQ                                           Query Definition                                                                                                                    
+TR0009200144RSECADMIN                                       Berechtigung                                                                                                                        
+TR0009200145RSPCM                                           Prozessketten überwachen                                                                                                            
+TR0009300317SE16                                            Tabelle REPOSRC (Programm Ersteller/Änderer/Datum)                                                                                  
+TR0009300308SE54                                            Generierung Tabellensicht                                                                                                           
+  0009300306                                                ODATA                                                                                                                               
+TR0009300303SE91                                            Nachrichtenpflege                                                                                                                   
+TR0009300297SU53                                            Auswertung der Berechtigungspüfung                                                                                                  
+TR0009300287SNRO                                            Nummernkreisobjekte                                                                                                                 
+TR0009300270SFP                                             Form Builder                                                                                                                        
+TR0009300264SCMP                                            View/Tabellen-Vergleich                                                                                                             
+TR0009300261SE16S                                           Allgemeine Tabellen- und Wertsuche                                                                                                  
+TR0009300252SMW0                                            SAP Web Repository                                                                                                                  
+TR0009300246CODE_SCANNER                                    ABAP Search                                                                                                                         
+TR0009300242SREPO                                           Repository Vergleich                                                                                                                
+TR0009300232SE54                                            Generierung Tabellensicht                                                                                                           
+TR0009300220CMOD                                            Erweiterungen                                                                                                                       
+TR0009300216OAOR                                            Business Document Service: Dokumente                                                                                                
+TR0009300205SM34                                            Aufruf Viewcluster-Pflege                                                                                                           
+TR0009300204SE93                                            Pflege Transaktionscodes                                                                                                            
+TR0009300203SE54                                            Generierung Tabellensicht                                                                                                           
+TR0009300194SE63                                            Übersetzungseditor                                                                                                                  
+TR0009300295SLXT                                            Übersetzungstransport                                                                                                               
+TR0009300173SE91                                            Nachrichtenpflege                                                                                                                   
+TR0009300168SHD0                                            Transaktions- und Screenvarianten                                                                                                   
+TR0009300166DBACOCKPIT                                      DBA Cockpit starten                                                                                                                 
+TR0009300165SM50                                            Workprozesse einer AS-Instanz                                                                                                       
+TR0009300100ST12                                            Single transaction analysis                                                                                                         
+TR0009300101SM59                                            RFC-Destinations (Anzeige u. Pflege)                                                                                                
+TR0009300102SE16H                                           Allgemeine Tabellenanzeige                                                                                                          
+TR0009300103ST01                                            System-Trace                                                                                                                        
+TR0009300104STAD                                            Systemübergreif. Statistiksatzanzeig                                                                                                
+TR0009300105ST05                                            Performance Trace                                                                                                                   
+TR0009300106SAT                                             ABAP Trace                                                                                                                          
+TR0009300107SCU3                                            Tabellenhistorie                                                                                                                    
+TR0009300108SM12                                            Sperren anzeigen und löschen                                                                                                        
+TR0009300109SM30                                            Aufruf View-Pflege                                                                                                                  
+TR0009300111SE16H                                           Allgemeine Tabellenanzeige                                                                                                          
+TR0009300110SE16N                                           Allgemeine Tabellenanzeige                                                                                                          
+TR0009300112SE19                                            BAdI-Builder - Implementierungen                                                                                                    
+TR0009300113SE18                                            BAdI-Builder - Definitionen                                                                                                         
+TR0014900299SU53                                            Auswertung der Berechtigungspüfung                                                                                                  
+TR0014900150SE16T                                           Datenbank Suchfunktionen                                                                                                            
+  0014900151                                                Debug                                                                                                                               
+  0014900152                                                Trace                                                                                                                               
+TR0018400185MD04                                            Anzeigen Bestands-/Bedarfssituation                                                                                                 
+TR0018400182MD06                                            Sammelanzeige Dispositionsliste                                                                                                     
+TR0018400183MD03                                            MRP-Einzelplanung -einstufig-                                                                                                       
+TR0018600192ZMM_ET_SATZ_DRUCK                               Etikettensatz Druck                                                                                                                 
+TR0018600191ZMM_ET_SATZ_PFLEGE                              Etikettensatz Pflege                                                                                                                
+TR0018600190ZMM_VAROKAN_ETIKETT                             Varokan Etiketten                                                                                                                   
+TR0018600189ZMM_SE_EINZEL                                   Sandwich Einzel Etiketten                                                                                                           
+TR0018600188ZMM_ID_ETIKETT                                  ID Etiketten Druck                                                                                                                  
+TR0018600187ZMM_ADRESS_ETIKETT                              Adress Etiketten Druck                                                                                                              
+TR0027300276/FIS/CA_HELP                                    FIS/wws Cash: Cockpit                                                                                                               
+TR0027300275/FIS/CA_TEAM                                    FIS/wws Cash: Zuordnung Team/User                                                                                                   
+TR0027300274/FIS/CA_LOG                                     FIS/wws Cash: Userzuord. zur Kasse                                                                                                  
+TR0027900283F-28                                            Zahlungseingang buchen                                                                                                              
+TR0027900282VF01                                            Fakturen anlegen                                                                                                                    
+TR0027900281VL01N                                           Auslieferung zum Kd.auftrag anlegen                                                                                                 
+TR0027900280VA01                                            Kundenauftrag anlegen                                                                                                               
+TR0031100322ME21N                                           Bestellung anlegen                                                                                                                  
+TR0031100321VL10B                                           Versandfällige Bestellungen                                                                                                         
+TR0031100320WE19                                            Testwerkzeug                                                                                                                        
+TR0031100319ME2ON                                           Lohnbearbeitungs-Cockpit                                                                                                            
+TR0031100314VA01                                            Kundenauftrag anlegen                                                                                                               
+TR0031100315VA02                                            Kundenauftrag ändern                                                                                                                
+TR0031100313ZSD084                                          Case Kalkulation Cockpit                                                                                                            
+TR0031100312VL10A                                           Versandfällige Kundenaufträge (Lieferung erzeugen/Case anstoßen)                                                                    
+TR0015100158ST22                                            ABAP Dumpanalyse                                                                                                                    
+TR0015100159SE80                                            Object Navigator                                                                                                                    
+TR0015100160SE84                                            Repository-Infosystem                                                                                                               
+TR0015200153SAT                                             Laufzeitanalyse                                                                                                                     
+TR0015200154ST05                                            SQL-Trace                                                                                                                           
+TR0015200155ST12                                            Single transaction analysis                                                                                                         
+TR0015200156ST01                                            System Trace                                                                                                                        
+  0015200157                                                Berechtigung                                                                                                                        
+TR0023700316WE19                                            Testwerkzeug                                                                                                                        
+TR0023700256BD52                                            Änd.zeiger aktiv. pro Änd.beleg-Pos.                                                                                                
+TR0023700255BD50                                            Änd.zeiger für Nachrichtentyp aktiv.                                                                                                
+TR0023700254WE20                                            Partnervereinbarungen                                                                                                               
+TR0023700239WE02                                            Anzeigen IDoc                                                                                                                       
+TR0023700238BD87                                            Statusmonitor für ALE-Nachrichten                                                                                                   
+TR0030600301SEGW                                            Transaktion SEGW                                                                                                                    
+TR0030600304SICF                                            Pflege des HTTP-Service-Baums                                                                                                       
+TR0030600305/IWFND/MAINT_SERVICE                            Services aktivieren und verwalten                                                                                                   
+TR0015700285SU53                                            Auswertung der Berechtigungspüfung                                                                                                  
+TR0015700161STAUTHTRACE                                     Berechtigungstrace                                                                                                                  
+TR0015700162SU21                                            Berechtigungsobjekte                                                                                                                
+TR0015700163PFCG                                            Berechtigungsrollen                                                                                                                 

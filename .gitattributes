@@ -1,0 +1,2 @@
+# Echter SAP-Export: cp1252 mit CRLF. Git darf daran nichts umkodieren.
+testdata/** -text -diff
