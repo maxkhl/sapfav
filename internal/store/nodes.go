@@ -65,6 +65,13 @@ func (s *Store) Get(ctx context.Context, id int64) (*Node, error) {
 	return getNode(ctx, s.db, id)
 }
 
+// Count liefert die Anzahl aller Knoten.
+func (s *Store) Count(ctx context.Context) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM nodes").Scan(&n)
+	return n, err
+}
+
 // Tree liefert alle Knoten verschachtelt, sortiert nach sort_index.
 func (s *Store) Tree(ctx context.Context) ([]*Node, error) {
 	rows, err := s.db.QueryContext(ctx, "SELECT "+nodeColumns+" FROM nodes ORDER BY sort_index, id")
