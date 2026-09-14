@@ -1,8 +1,9 @@
 # sapfav
 
 Web-Tool zur Verwaltung von SAP-Transaktionscodes (Ersatz für die
-SAP-Easy-Access-Favoritenliste). Läuft als Docker-Container im Homelab
-(Dockge, hinter Nginx Proxy Manager und Authentik Forward Auth).
+SAP-Easy-Access-Favoritenliste), mit Favoriten je Kunde für die Arbeit als
+SAP-Dienstleister. Läuft als Docker-Container im Homelab (Dockge, hinter
+Nginx Proxy Manager und Authentik Forward Auth).
 
 ## Stack — bewusst gewählt, nicht umwerfen
 
@@ -22,21 +23,35 @@ SAP-Easy-Access-Favoritenliste). Läuft als Docker-Container im Homelab
 
 ## Datenmodell
 
-Eine Tabelle `nodes`, Baum beliebiger Tiefe: `id`, `parent_id` (NULL = oberste
-Ebene), `kind` (`folder`|`tx`), `tcode` (nur bei `tx`), `title`, `description`,
-`sort_index`, `created_at`, `updated_at`.
+Tabelle `customers`: `id`, `name` (eindeutig, ohne Groß/klein), `notes`
+(Freitext, z. B. SIDs/Mandanten), `created_at`, `updated_at`.
+Eine eigene Systemebene gibt es bewusst nicht.
 
+Tabelle `nodes`, Baum beliebiger Tiefe: `id`, `customer_id` (NULL = Allgemein),
+`parent_id` (NULL = oberste Ebene), `kind` (`folder`|`tx`), `tcode` (nur bei `tx`),
+`title`, `description`, `sort_index`, `created_at`, `updated_at`.
+
+- Jeder Eintrag gehört zu genau einem Bereich: Allgemein oder ein Kunde
+  (Variante A, keine Mehrfachzuordnung). Unter einem Ordner gilt dessen Kunde.
+  Die oberste Ebene wird je Bereich sortiert.
 - Schema in `internal/store/schema.sql`, eingebettet, beim Start angewandt.
   Versionierung über `PRAGMA user_version`, kein Migrations-Framework.
+  Stand 2026-09-14 gibt es noch keine echten Daten, daher wurde Version 1 direkt
+  geändert. Sobald die App produktiv läuft, Änderungen nur noch als neue Version.
 - Parent muss ein Ordner sein; keine Zyklen beim Verschieben (im Code geprüft).
-- Verschieben: ans Ende des Ziel-Parents, Quelle und Ziel werden neu durchnummeriert.
+- Verschieben: ans Ende des Ziels, Quelle und Ziel werden neu durchnummeriert.
+  Wechselt der Bereich, zieht der Unterbaum mit.
 - Ordner löschen nur mit expliziter Wahl: Inhalt eine Ebene hoch (`lift`) oder
   mitlöschen (`delete`). Nicht-leerer Ordner ohne Wahl → 409.
+- Kunde löschen: Favoriten ans Ende von Allgemein (`general`) oder mitlöschen
+  (`delete`). Kunde mit Favoriten ohne Wahl → 409.
 
-## SAP-Import (Kernfeature)
+## SAP-Dateiformat (Paket `internal/sapfile`)
 
 Feste Spalten je Zeile: 0-1 `TR`/zwei Leerzeichen, 2-6 Parent-ID, 7-11 eigene ID,
 12-59 T-Code, ab 60 Kurztext. Hierarchie nur über IDs; Parent `00001` = oberste Ebene.
+
+**Import (Kernfeature)**
 
 - Datei ist cp1252 mit CRLF. Erst dekodieren, dann nach Zeichen (Runes) zerlegen.
   Encoding im Dialog umschaltbar, Default cp1252.
@@ -44,11 +59,24 @@ Feste Spalten je Zeile: 0-1 `TR`/zwei Leerzeichen, 2-6 Parent-ID, 7-11 eigene ID
   passende Zeilen sammeln und melden. Parent-IDs ins Leere → melden, beim Import
   auf oberste Ebene.
 - Zwei Schritte, zustandslos: `POST /api/import/preview` (schreibt nichts), dann
-  `POST /api/import` mit derselben Datei und `mode` = `append`|`replace`.
-  `append` hängt ans Ende der obersten Ebene. `sort_index` = Dateireihenfolge.
+  `POST /api/import` mit derselben Datei, Zielbereich `customer` und
+  `mode` = `append`|`replace`. `replace` betrifft nur den Zielbereich, `append`
+  hängt ans Ende seiner obersten Ebene. `sort_index` = Dateireihenfolge.
 - `testdata/sap-favorites-export.txt` ist ein echter Export: 237 Knoten,
   15 Ordner, 222 Transaktionen, alle ab oberster Ebene erreichbar. Nicht anfassen
   (`.gitattributes` schützt die CRLF-Enden).
+
+**Export zurück nach SAP**
+
+- Gleiches Format: cp1252, CRLF auch nach der letzten Zeile, jede Zeile auf
+  192 Zeichen aufgefüllt. IDs fortlaufend ab 00002, Ordner vor ihrem Inhalt.
+- Kunde + Allgemein in einer Datei **flach**: erst die oberste Ebene von
+  Allgemein, dann die des Kunden — keine Hüllordner.
+- Verluste werden als Warnung gemeldet: Zeichen außerhalb cp1252 → `?`,
+  Kurztext > 132 Zeichen gekürzt, T-Code > 48 Zeichen ausgelassen.
+  Beschreibungen haben in SAP kein Feld und entfallen.
+- Roundtrip-Test: echter Export → Import → SAP-Export → Import ergibt denselben Baum.
+- Ob SAP die Datei beim Hochladen annimmt, ist nur manuell prüfbar.
 
 ## API-Regeln
 
@@ -56,7 +84,7 @@ Feste Spalten je Zeile: 0-1 `TR`/zwei Leerzeichen, 2-6 Parent-ID, 7-11 eigene ID
 - Schreib-Endpunkte (POST/PUT/DELETE) nur mit `Content-Type: application/json`,
   sonst 415 — Schutz gegen Cross-Site-Form-Posts, da die App selbst keine Auth hat.
 - Ausnahme Import-Upload (multipart): verlangt `X-Requested-With: XMLHttpRequest`.
-- Suche läuft clientseitig über den geladenen Baum.
+- `GET /api/tree` liefert alle Bereiche; Filtern nach Kunde und Suche laufen im Browser.
 
 ## Betrieb
 
@@ -70,4 +98,6 @@ Feste Spalten je Zeile: 0-1 `TR`/zwei Leerzeichen, 2-6 Parent-ID, 7-11 eigene ID
 
 - Keine Features einbauen, die nicht vereinbart sind — Ideen als Vorschlag nennen.
 - Drag & Drop ist bewusst nicht in v1.
-- In kleinen Schritten committen.
+- In kleinen Schritten committen; jeder Commit muss für sich bauen und testen.
+- Frontend-Formulare: Felder immer über `form.elements.<name>` ansprechen —
+  `form.title`, `form.encoding`, `form.name` usw. sind eingebaute Eigenschaften.
