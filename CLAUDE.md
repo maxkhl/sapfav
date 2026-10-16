@@ -78,6 +78,42 @@ Feste Spalten je Zeile: 0-1 `TR`/zwei Leerzeichen, 2-6 Parent-ID, 7-11 eigene ID
 - Roundtrip-Test: echter Export → Import → SAP-Export → Import ergibt denselben Baum.
 - Ob SAP die Datei beim Hochladen annimmt, ist nur manuell prüfbar.
 
+## MCP-Schnittstelle (Paket `internal/mcp`)
+
+Ein Endpunkt `POST /mcp`, JSON-RPC 2.0, Antwort immer als einzelnes JSON-Objekt
+(kein SSE — wir senden keine Fortschrittsmeldungen).
+
+- **Zwei Protokoll-Zeitalter ("dual-era"):** Revision `2026-07-28` (Version,
+  Identität und Fähigkeiten als `_meta` je Anfrage, keine Sessions, kein
+  Handshake) **und** der `initialize`-Weg älterer Revisionen (`2025-11-25`
+  und früher). Welche ein Claude-Client spricht, steht vorher nicht fest.
+  Erkennung: liegt `_meta.io.modelcontextprotocol/protocolVersion` im Body,
+  gilt die moderne Revision, sonst die alte. `resultType: "complete"` darf
+  nur bei der modernen Revision im Ergebnis stehen.
+- **Header werden gegen den Body geprüft:** `MCP-Protocol-Version`,
+  `Mcp-Method` und bei `tools/call` `Mcp-Name` spiegeln Body-Felder, damit
+  Proxys routen können. Abweichung → `400` mit `-32020`. Die Base64-Sonderform
+  `=?base64?…?=` muss vorher dekodiert werden.
+- Unbekannte Version → `400` mit `-32022` und Liste der unterstützten
+  Versionen. Unbekannte Methode → `404` mit `-32601`. Benachrichtigungen →
+  `202`. `GET`/`DELETE` → `405`. Vorhandener fremder `Origin` → `403`
+  (Pflicht gegen DNS-Rebinding). `server/discover` ist Pflicht.
+- **Fehler:** Was das Modell korrigieren kann (ungültige Argumente,
+  `ErrInvalid`, `ErrNotFound`, `ErrConflict`), kommt als Tool-Ergebnis mit
+  `isError: true` zurück; alles andere als JSON-RPC-Fehler `-32603`.
+- **Tools** (elf): lesend `list_customers`, `get_tree`, `search`; schreibend
+  `create_node`, `update_node` (nur mitgeschickte Felder), `move_node`,
+  `set_children_order`, `delete_node`; dazu die drei Kunden-Tools.
+  `set_children_order` sortiert eine ganze Ebene in einem Aufruf — mit
+  Hoch/Runter bräuchte ein Modell für 88 Einträge hunderte Aufrufe.
+  Import und SAP-Export sind bewusst **keine** Tools.
+- **Absicherung:** `SAPFAV_MCP_TOKEN` schaltet den Endpunkt ein; ist er leer,
+  wird `/mcp` nicht registriert. Vergleich in konstanter Zeit. Authentik Forward
+  Auth kann hier nicht greifen (keine Browser-Anmeldung möglich), deshalb wird
+  `/mcp` im Authentik-Proxy-Provider als *unauthenticated path* geführt.
+  OAuth bauen wir nicht: claude.ai kann feste Request-Header (Beta),
+  Claude Code ohnehin.
+
 ## API-Regeln
 
 - REST unter `/api`, JSON rein/raus. `GET /healthz` für den Healthcheck.
@@ -88,7 +124,8 @@ Feste Spalten je Zeile: 0-1 `TR`/zwei Leerzeichen, 2-6 Parent-ID, 7-11 eigene ID
 
 ## Betrieb
 
-- Env: `SAPFAV_DB` (Default `/data/tcodes.db`), `SAPFAV_PORT` (Default `8000`).
+- Env: `SAPFAV_DB` (Default `/data/tcodes.db`), `SAPFAV_PORT` (Default `8000`),
+  `SAPFAV_MCP_TOKEN` (leer = MCP-Schnittstelle aus).
 - Healthcheck im Container über `sapfav healthcheck` (distroless hat kein curl).
 - CI: Push auf `main` → `go vet`, `go test`, dann Image nach
   `ghcr.io/maxkhl/sapfav` (`:latest`, `:<short-sha>`), amd64+arm64 per

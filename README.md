@@ -11,6 +11,7 @@ mit eigenen Favoriten je Kunde.
 - Anlegen, Bearbeiten, Löschen, Verschieben, Hoch/Runter
 - Import des SAP-Favoriten-Exports mit Vorschau
 - Export zurück ins SAP-Format zum Hochladen in SAP
+- MCP-Schnittstelle, um Claude die Pflege zu überlassen
 - Backup des ganzen Datenbestands als JSON
 
 Ein einzelnes, statisch gelinktes Go-Binary mit SQLite, kein Framework, keine
@@ -56,6 +57,7 @@ echo <PAT mit read:packages> | docker login ghcr.io -u maxkhl --password-stdin
 |---------------|-------------------|------------------------------------|
 | `SAPFAV_PORT` | `8000`            | Port im Container und auf dem Host |
 | `SAPFAV_DB`   | `/data/tcodes.db` | Pfad der SQLite-Datenbank          |
+| `SAPFAV_MCP_TOKEN` | leer         | Token für `/mcp`; leer = Schnittstelle aus |
 
 ### Daten und Rechte
 
@@ -156,6 +158,96 @@ Eine Zeile je Eintrag, feste Spalten:
 Beim Import werden Zeilen mit verrutschten Spalten (z. B. nach Kopieren aus
 einem Editor) per Fallback zerlegt statt verworfen.
 
+## MCP-Schnittstelle (Claude anbinden)
+
+Über `/mcp` kann Claude die Favoriten lesen und pflegen: aufräumen, sortieren,
+anlegen, ändern, löschen. Die Schnittstelle spricht das Model Context Protocol
+über Streamable HTTP.
+
+### Einschalten
+
+Die Schnittstelle ist **standardmäßig aus**. Sie geht erst an, wenn ein Token
+gesetzt ist:
+
+```sh
+openssl rand -hex 32          # Token erzeugen
+```
+
+Den Wert in `.env` eintragen (`SAPFAV_MCP_TOKEN=…`) und den Stack neu starten.
+Im Log steht danach `mcp=true`. Ohne Token antwortet `/mcp` nicht.
+
+### Authentik und Nginx Proxy Manager
+
+Ein MCP-Client kann keine Browser-Anmeldung durchlaufen, Forward Auth greift
+hier also nicht. Deshalb:
+
+1. Im Authentik-**Proxy-Provider** unter **Unauthenticated Paths** `/mcp`
+   eintragen (bei mehreren Pfaden eine Zeile je Pfad).
+2. NPM bleibt unverändert.
+
+Die Oberfläche liegt damit weiter vollständig hinter Authentik, nur `/mcp` geht
+durch — und wird dort vom Token geschützt. **HTTPS ist Pflicht**, sonst geht der
+Token im Klartext über das Netz.
+
+### In claude.ai einrichten
+
+Einstellungen → Connectors → **Add custom connector**:
+
+| Feld | Wert |
+|---|---|
+| Name | `sapfav` |
+| Remote MCP server URL | `https://sapfav.example.com/mcp` |
+| Authentication | **No sign in** |
+| Request headers | Name `Authorization`, Wert `Bearer <dein Token>` |
+
+Den Abschnitt *Request headers* hat Anthropic noch als Beta ausgerollt. Fehlt er,
+ist die Organisation nicht freigeschaltet — dann hilft nur Claude Code (unten).
+Die Anmeldedaten lassen sich später nicht bearbeiten; zum Wechseln den Connector
+entfernen und neu anlegen.
+
+### In Claude Code einrichten
+
+```sh
+claude mcp add --transport http sapfav https://sapfav.example.com/mcp \
+  --header "Authorization: Bearer <dein Token>"
+```
+
+Mit `/mcp` in Claude Code prüfen, ob die Verbindung steht.
+
+### Tools
+
+| Tool | Zweck |
+|---|---|
+| `list_customers` | Kunden mit Notizen und Anzahl der Einträge |
+| `get_tree` | Baum eines Bereichs oder aller Bereiche |
+| `search` | Suche über T-Code, Titel, Beschreibung; Treffer mit Pfad |
+| `create_node` | Ordner oder Transaktion anlegen |
+| `update_node` | T-Code, Titel, Beschreibung ändern (nur mitgeschickte Felder) |
+| `move_node` | in einen anderen Ordner oder Bereich hängen |
+| `set_children_order` | Reihenfolge einer ganzen Ebene in einem Aufruf setzen |
+| `delete_node` | löschen, Ordnerinhalt hochziehen oder mitlöschen |
+| `create_customer`, `update_customer`, `delete_customer` | Kundenverwaltung |
+
+Import und SAP-Export gibt es bewusst nicht als Tools; die laufen über die
+Oberfläche.
+
+Beispiele, die damit funktionieren:
+
+- „Sortiere die oberste Ebene von Allgemein alphabetisch.“
+- „Welche Transaktionen habe ich doppelt? Räum die Dubletten auf.“
+- „Lege für Kunde X einen Ordner Logistik an und verschiebe alle VL-Transaktionen dorthin.“
+- „Ergänze bei SE16 eine Beschreibung, wofür ich das nutze.“
+
+### Sicherheit
+
+- Der Token gilt für **alles**, auch fürs Löschen. Vorher mit **Backup (JSON)**
+  eine Sicherung ziehen.
+- Dein Client fragt bei löschenden Tools nach, weil sie als destruktiv markiert
+  sind. Das ist aber eine Zusage des Clients, keine Sperre im Server.
+- Token wechseln: Wert in `.env` ändern und neu starten. Danach den Connector
+  bzw. den Eintrag in Claude Code neu anlegen.
+- Abschalten: `SAPFAV_MCP_TOKEN` leeren und neu starten.
+
 ## Backup
 
 **Backup (JSON)** in der Kopfzeile lädt Kunden und alle Favoriten inklusive
@@ -200,3 +292,4 @@ JSON unter `/api`. Schreibende Requests brauchen `Content-Type: application/json
 | POST   | `/api/nodes/{id}/reorder` | `{direction: "up" \| "down"}` |
 | POST   | `/api/import/preview` | multipart: `file`, `encoding`, `customer` |
 | POST   | `/api/import` | multipart: `file`, `encoding`, `customer`, `mode` = `append` \| `replace` |
+| POST   | `/mcp` | MCP über Streamable HTTP, JSON-RPC 2.0; `Authorization: Bearer <Token>` |
