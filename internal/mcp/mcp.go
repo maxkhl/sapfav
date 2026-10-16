@@ -99,6 +99,7 @@ type rpcResponse struct {
 func (s *Server) Handle(w http.ResponseWriter, r *http.Request) {
 	// Pflicht gegen DNS-Rebinding: ein vorhandener, fremder Origin wird abgewiesen.
 	if origin := r.Header.Get("Origin"); origin != "" && !sameOrigin(origin, r.Host) {
+		s.log.Warn("MCP-Anfrage mit fremdem Origin abgelehnt", "origin", origin, "host", r.Host)
 		s.write(w, http.StatusForbidden, &rpcResponse{JSONRPC: "2.0",
 			Error: &rpcError{Code: codeInvalidRequest, Message: "Origin nicht erlaubt"}})
 		return

@@ -43,10 +43,10 @@ func New(st *store.Store, log *slog.Logger, mcpToken string) http.Handler {
 
 	if mcpToken != "" {
 		m := mcp.New(st, log)
-		mux.HandleFunc("POST /mcp", requireToken(mcpToken, m.Handle))
+		mux.HandleFunc("POST /mcp", requireToken(log, mcpToken, m.Handle))
 		// Die Session- und SSE-Mechanismen älterer Revisionen gibt es nicht.
-		mux.HandleFunc("GET /mcp", requireToken(mcpToken, m.MethodNotAllowed))
-		mux.HandleFunc("DELETE /mcp", requireToken(mcpToken, m.MethodNotAllowed))
+		mux.HandleFunc("GET /mcp", requireToken(log, mcpToken, m.MethodNotAllowed))
+		mux.HandleFunc("DELETE /mcp", requireToken(log, mcpToken, m.MethodNotAllowed))
 	}
 
 	mux.Handle("GET /", staticHandler())
