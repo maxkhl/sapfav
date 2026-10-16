@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/maxkhl/sapfav/internal/store"
@@ -577,6 +578,117 @@ func (s *Server) register() {
 				out["children"] = a.Children
 			}
 			return out, nil
+		},
+	})
+
+	s.add(&tool{
+		name:  "delete_nodes",
+		title: "Mehrere Einträge löschen",
+		description: "Löscht mehrere Einträge in einem Aufruf und einer Transaktion: " +
+			"entweder alle oder keiner. Beim Aufräumen von Dubletten diesem Tool den " +
+			"Vorzug vor einzelnen delete_node-Aufrufen geben. children gilt wie bei " +
+			"delete_node für Ordner mit Inhalt. Einträge, die als Kind eines anderen " +
+			"Eintrags der Liste verschwinden, kommen als already_removed zurück.",
+		inputSchema: `{"type":"object","additionalProperties":false,"required":["ids"],"properties":{` +
+			`"ids":{"type":"array","minItems":1,"items":{"type":"integer"},` +
+			`"description":"IDs der zu löschenden Einträge"},` +
+			`"children":{"type":"string","enum":["lift","delete"],` +
+			`"description":"nur nötig, wenn ein Ordner mit Inhalt dabei ist"}}}`,
+		outputSchema: `{"type":"object","properties":{` +
+			`"deleted":{"type":"array","items":{"type":"integer"}},` +
+			`"already_removed":{"type":"array","items":{"type":"integer"}},` +
+			`"count":{"type":"integer"}},"required":["deleted","count"]}`,
+		destructive: true,
+		run: func(ctx context.Context, args json.RawMessage) (any, error) {
+			var a struct {
+				IDs      []int64 `json:"ids"`
+				Children string  `json:"children"`
+			}
+			if err := decodeArgs(args, &a); err != nil {
+				return nil, err
+			}
+			res, err := s.store.DeleteMany(ctx, a.IDs, a.Children)
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{
+				"deleted":         res.Deleted,
+				"already_removed": res.AlreadyRemoved,
+				"count":           len(res.Deleted),
+			}, nil
+		},
+	})
+
+	s.add(&tool{
+		name:  "find_duplicates",
+		title: "Dubletten finden",
+		description: "Findet Transaktionen, die mit demselben T-Code mehrfach vorkommen, " +
+			"gruppiert nach T-Code und mit Pfad je Eintrag. Ordner bleiben außen vor. " +
+			"Die IDs lassen sich direkt an delete_nodes weitergeben.",
+		inputSchema: `{"type":"object","additionalProperties":false,"properties":{` + schemaScopeProps + `}}`,
+		outputSchema: `{"type":"object","properties":{` +
+			`"group_count":{"type":"integer","description":"Anzahl mehrfach vorkommender T-Codes"},` +
+			`"extra_count":{"type":"integer","description":"wie viele Einträge übrig wären, bliebe je T-Code einer"},` +
+			`"groups":{"type":"array","items":{"type":"object","properties":{` +
+			`"tcode":{"type":"string"},"count":{"type":"integer"},` +
+			`"entries":{"type":"array","items":{"type":"object","properties":{` +
+			`"id":{"type":"integer"},"title":{"type":"string"},"description":{"type":"string"},` +
+			`"path":{"type":"string"},"customer_id":{"type":["integer","null"]}},` +
+			`"required":["id","title","path"]}}},"required":["tcode","count","entries"]}}},` +
+			`"required":["group_count","extra_count","groups"]}`,
+		readOnly: true,
+		run: func(ctx context.Context, args json.RawMessage) (any, error) {
+			var a scopeArgs
+			if err := decodeArgs(args, &a); err != nil {
+				return nil, err
+			}
+			scopes, err := s.scopes(ctx, a)
+			if err != nil {
+				return nil, err
+			}
+			tree, err := s.store.Tree(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			byTCode := map[string][]map[string]any{}
+			for _, sc := range scopes {
+				var walk func(nodes []*store.Node, path string)
+				walk = func(nodes []*store.Node, path string) {
+					for _, n := range nodes {
+						if n.Kind == store.KindTx && n.TCode != nil {
+							entry := map[string]any{"id": n.ID, "title": n.Title,
+								"path": path, "customer_id": sc.customerID}
+							if n.Description != nil {
+								entry["description"] = *n.Description
+							}
+							key := strings.ToUpper(strings.TrimSpace(*n.TCode))
+							byTCode[key] = append(byTCode[key], entry)
+						}
+						walk(n.Children, path+" / "+n.Title)
+					}
+				}
+				walk(topLevel(tree, sc.customerID), sc.name)
+			}
+
+			codes := make([]string, 0, len(byTCode))
+			for code, entries := range byTCode {
+				if len(entries) > 1 {
+					codes = append(codes, code)
+				}
+			}
+			sort.Strings(codes) // deterministische Reihenfolge
+
+			groups := make([]map[string]any, 0, len(codes))
+			extra := 0
+			for _, code := range codes {
+				entries := byTCode[code]
+				extra += len(entries) - 1
+				groups = append(groups, map[string]any{
+					"tcode": code, "count": len(entries), "entries": entries,
+				})
+			}
+			return map[string]any{"group_count": len(groups), "extra_count": extra, "groups": groups}, nil
 		},
 	})
 

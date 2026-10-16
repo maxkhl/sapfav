@@ -315,3 +315,74 @@ func TestToolArgumentErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestToolsDeleteNodesAndDuplicates(t *testing.T) {
+	s, _ := newServerWithStore(t)
+	customer := ok(t, s, "create_customer", map[string]any{"name": "ACME"})
+	cid := num(t, customer["id"])
+
+	folder := ok(t, s, "create_node", map[string]any{"kind": "folder", "title": "Vertrieb"})
+	fid := num(t, folder["id"])
+	oben := ok(t, s, "create_node", map[string]any{"kind": "tx", "tcode": "VA03", "title": "Auftrag oben"})
+	innen := ok(t, s, "create_node", map[string]any{"kind": "tx", "tcode": "va03", "title": "Auftrag im Ordner", "parent_id": fid})
+	ok(t, s, "create_node", map[string]any{"kind": "tx", "tcode": "SE16", "title": "Data Browser"})
+	beimKunden := ok(t, s, "create_node", map[string]any{"kind": "tx", "tcode": "VA03", "title": "Auftrag Kunde", "customer_id": cid})
+
+	// Groß- und Kleinschreibung des T-Codes darf keine Rolle spielen.
+	dups := ok(t, s, "find_duplicates", nil)
+	if num(t, dups["group_count"]) != 1 || num(t, dups["extra_count"]) != 2 {
+		t.Fatalf("Dubletten: %#v", dups)
+	}
+	groups, _ := dups["groups"].([]any)
+	group, _ := groups[0].(map[string]any)
+	entries, _ := group["entries"].([]any)
+	if group["tcode"] != "VA03" || len(entries) != 3 {
+		t.Fatalf("Gruppe: %#v", group)
+	}
+	paths := map[string]bool{}
+	for _, e := range entries {
+		entry, _ := e.(map[string]any)
+		paths[entry["path"].(string)] = true
+	}
+	if !paths["Allgemein"] || !paths["Allgemein / Vertrieb"] || !paths["ACME"] {
+		t.Errorf("Pfade: %#v", paths)
+	}
+
+	// Auf einen Bereich eingeschränkt bleibt nichts Doppeltes übrig.
+	only := ok(t, s, "find_duplicates", map[string]any{"scope": "customer", "customer_id": cid})
+	if num(t, only["group_count"]) != 0 {
+		t.Errorf("Kundenbereich: %#v", only)
+	}
+
+	// Fehlerfälle löschen nichts.
+	for _, args := range []map[string]any{
+		{"ids": []any{num(t, innen["id"]), 999}},
+		{"ids": []any{}},
+		{"ids": []any{fid}},
+	} {
+		if _, errText := runTool(t, s, "delete_nodes", args); errText == "" {
+			t.Errorf("kein Fehler für %#v", args)
+		}
+	}
+	if tree := ok(t, s, "get_tree", map[string]any{"scope": "general"}); len(nodesOf(t, tree, 0)) != 3 {
+		t.Fatalf("trotz Fehler gelöscht: %#v", tree)
+	}
+
+	// Stapellöschen: Ordner mit Inhalt plus zwei Einzelne, in einem Aufruf.
+	out := ok(t, s, "delete_nodes", map[string]any{
+		"ids":      []any{fid, num(t, innen["id"]), num(t, oben["id"]), num(t, beimKunden["id"])},
+		"children": "delete",
+	})
+	if num(t, out["count"]) != 3 {
+		t.Errorf("count: %#v", out)
+	}
+	if already, _ := out["already_removed"].([]any); len(already) != 1 || num(t, already[0]) != num(t, innen["id"]) {
+		t.Errorf("already_removed: %#v", out)
+	}
+	if got := titlesOf(t, nodesOf(t, ok(t, s, "get_tree", map[string]any{"scope": "general"}), 0)); len(got) != 1 || got[0] != "Data Browser" {
+		t.Errorf("Allgemein danach: %v", got)
+	}
+	if num(t, ok(t, s, "find_duplicates", nil)["group_count"]) != 0 {
+		t.Error("nach dem Aufräumen gibt es noch Dubletten")
+	}
+}

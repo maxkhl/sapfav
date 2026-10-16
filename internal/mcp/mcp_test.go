@@ -143,8 +143,8 @@ func TestToolsListAndCall(t *testing.T) {
 	if list.ResultType != "complete" {
 		t.Errorf("resultType %q", list.ResultType)
 	}
-	if len(list.Tools) != 11 {
-		t.Errorf("%d Tools, want 11", len(list.Tools))
+	if len(list.Tools) != 13 {
+		t.Errorf("%d Tools, want 13", len(list.Tools))
 	}
 	seen := map[string]bool{}
 	for _, tl := range list.Tools {
@@ -403,7 +403,7 @@ func TestLegacyEra(t *testing.T) {
 		ResultType string           `json:"resultType"`
 	}
 	json.Unmarshal(out.Result, &list)
-	if len(list.Tools) != 11 || list.ResultType != "" {
+	if len(list.Tools) != 13 || list.ResultType != "" {
 		t.Errorf("%d Tools, resultType %q", len(list.Tools), list.ResultType)
 	}
 
