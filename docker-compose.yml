@@ -8,6 +8,8 @@ services:
     environment:
       SAPFAV_PORT: ${SAPFAV_PORT:-8000}
       SAPFAV_DB: ${SAPFAV_DB:-/data/tcodes.db}
+      # Leer = MCP-Schnittstelle aus. Siehe README.
+      SAPFAV_MCP_TOKEN: ${SAPFAV_MCP_TOKEN:-}
     ports:
       - "${SAPFAV_PORT:-8000}:${SAPFAV_PORT:-8000}"
     volumes:

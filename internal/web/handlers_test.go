@@ -19,12 +19,17 @@ import (
 
 func newServer(t *testing.T) http.Handler {
 	t.Helper()
+	return newServerWithToken(t, "")
+}
+
+func newServerWithToken(t *testing.T, mcpToken string) http.Handler {
+	t.Helper()
 	st, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	return New(st, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return New(st, slog.New(slog.NewTextHandler(io.Discard, nil)), mcpToken)
 }
 
 func do(t *testing.T, h http.Handler, method, path, contentType, body string) *httptest.ResponseRecorder {
@@ -312,5 +317,50 @@ func TestSAPExport(t *testing.T) {
 	}
 	if rec := upload(t, h, "/api/import/preview", map[string]string{"customer": "999"}, true); rec.Code != http.StatusBadRequest {
 		t.Errorf("Import in unbekannten Kunden: %d", rec.Code)
+	}
+}
+
+func TestMCPEndpointToken(t *testing.T) {
+	const token = "geheim-genug-fuer-den-test-0123456789"
+	h := newServerWithToken(t, token)
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":` +
+		`{"io.modelcontextprotocol/protocolVersion":"2026-07-28"}}}`
+
+	call := func(method, auth string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/mcp", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("MCP-Protocol-Version", "2026-07-28")
+		req.Header.Set("Mcp-Method", "tools/list")
+		if auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	rec := call("POST", "")
+	if rec.Code != http.StatusUnauthorized || rec.Header().Get("WWW-Authenticate") == "" {
+		t.Errorf("ohne Token: %d %q", rec.Code, rec.Header().Get("WWW-Authenticate"))
+	}
+	if rec := call("POST", "Bearer falsch"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("falscher Token: %d", rec.Code)
+	}
+	if rec := call("POST", "Bearer "+token); rec.Code != http.StatusOK ||
+		!strings.Contains(rec.Body.String(), "set_children_order") {
+		t.Errorf("mit Token: %d %s", rec.Code, rec.Body)
+	}
+	if rec := call("GET", "Bearer "+token); rec.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET /mcp: %d", rec.Code)
+	}
+
+	// Ohne Token in der Umgebung gibt es den Endpunkt nicht.
+	off := newServerWithToken(t, "")
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	off.ServeHTTP(rec, req)
+	if rec.Code == http.StatusOK {
+		t.Errorf("MCP ist ohne Token erreichbar: %d %s", rec.Code, rec.Body)
 	}
 }

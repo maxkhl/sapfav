@@ -34,22 +34,26 @@ func main() {
 	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := run(log, port, env("SAPFAV_DB", "/data/tcodes.db")); err != nil {
+	if err := run(log, port, env("SAPFAV_DB", "/data/tcodes.db"), os.Getenv("SAPFAV_MCP_TOKEN")); err != nil {
 		log.Error("Abbruch", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(log *slog.Logger, port, dbPath string) error {
+func run(log *slog.Logger, port, dbPath, mcpToken string) error {
 	st, err := store.Open(dbPath)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
 
+	if mcpToken != "" && len(mcpToken) < 24 {
+		log.Warn("SAPFAV_MCP_TOKEN ist kurz – mindestens 24 Zeichen empfohlen (openssl rand -hex 32)")
+	}
+
 	srv := &http.Server{
 		Addr:              ":" + port,
-		Handler:           web.New(st, log),
+		Handler:           web.New(st, log, mcpToken),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -58,7 +62,7 @@ func run(log *slog.Logger, port, dbPath string) error {
 
 	errc := make(chan error, 1)
 	go func() {
-		log.Info("sapfav gestartet", "addr", srv.Addr, "db", dbPath)
+		log.Info("sapfav gestartet", "addr", srv.Addr, "db", dbPath, "mcp", mcpToken != "")
 		errc <- srv.ListenAndServe()
 	}()
 

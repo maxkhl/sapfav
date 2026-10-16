@@ -1,6 +1,7 @@
 package web
 
 import (
+	"crypto/subtle"
 	"mime"
 	"net/http"
 )
@@ -43,4 +44,20 @@ func mediaType(r *http.Request) string {
 		return ""
 	}
 	return mt
+}
+
+// requireToken schützt den MCP-Endpunkt mit einem festen Bearer-Token.
+// Die Oberfläche liegt hinter Authentik Forward Auth, aber ein MCP-Client kann
+// keine Browser-Anmeldung durchlaufen. Deshalb bekommt /mcp einen eigenen
+// Token und wird in Authentik als unauthenticated path eingetragen.
+func requireToken(token string, next http.HandlerFunc) http.HandlerFunc {
+	want := []byte("Bearer " + token)
+	return func(w http.ResponseWriter, r *http.Request) {
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="sapfav"`)
+			writeError(w, http.StatusUnauthorized, "Authorization: Bearer <Token> fehlt oder ist falsch")
+			return
+		}
+		next(w, r)
+	}
 }

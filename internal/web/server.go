@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/maxkhl/sapfav/internal/mcp"
 	"github.com/maxkhl/sapfav/internal/store"
 )
 
@@ -13,8 +14,9 @@ type server struct {
 	log   *slog.Logger
 }
 
-// New liefert den HTTP-Handler der Anwendung.
-func New(st *store.Store, log *slog.Logger) http.Handler {
+// New liefert den HTTP-Handler der Anwendung. Ist mcpToken leer, wird der
+// MCP-Endpunkt nicht registriert.
+func New(st *store.Store, log *slog.Logger, mcpToken string) http.Handler {
 	s := &server{store: st, log: log}
 	mux := http.NewServeMux()
 
@@ -38,6 +40,14 @@ func New(st *store.Store, log *slog.Logger) http.Handler {
 
 	mux.HandleFunc("POST /api/import/preview", requireUpload(s.importPreview))
 	mux.HandleFunc("POST /api/import", requireUpload(s.importRun))
+
+	if mcpToken != "" {
+		m := mcp.New(st, log)
+		mux.HandleFunc("POST /mcp", requireToken(mcpToken, m.Handle))
+		// Die Session- und SSE-Mechanismen älterer Revisionen gibt es nicht.
+		mux.HandleFunc("GET /mcp", requireToken(mcpToken, m.MethodNotAllowed))
+		mux.HandleFunc("DELETE /mcp", requireToken(mcpToken, m.MethodNotAllowed))
+	}
 
 	mux.Handle("GET /", staticHandler())
 
