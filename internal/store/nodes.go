@@ -434,6 +434,42 @@ func (s *Store) Reorder(ctx context.Context, id int64, direction string) error {
 	})
 }
 
+// SetOrder legt die Reihenfolge einer ganzen Ebene in einem Schritt fest:
+// unter einem Ordner (parentID) oder oben in einem Bereich (parentID nil,
+// customerID nil = Allgemein). ids muss genau die Knoten dieser Ebene
+// enthalten, in der gewünschten neuen Reihenfolge.
+func (s *Store) SetOrder(ctx context.Context, parentID, customerID *int64, ids []int64) error {
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		scope, err := resolveScope(ctx, tx, parentID, customerID)
+		if err != nil {
+			return err
+		}
+		current, err := childIDs(ctx, tx, parentID, scope)
+		if err != nil {
+			return err
+		}
+		if len(ids) != len(current) {
+			return fmt.Errorf("%w: diese Ebene hat %d Einträge, angegeben sind %d",
+				ErrInvalid, len(current), len(ids))
+		}
+		here := make(map[int64]bool, len(current))
+		for _, id := range current {
+			here[id] = true
+		}
+		seen := make(map[int64]bool, len(ids))
+		for _, id := range ids {
+			switch {
+			case !here[id]:
+				return fmt.Errorf("%w: Knoten %d gehört nicht zu dieser Ebene", ErrInvalid, id)
+			case seen[id]:
+				return fmt.Errorf("%w: Knoten %d ist doppelt angegeben", ErrInvalid, id)
+			}
+			seen[id] = true
+		}
+		return setOrder(ctx, tx, parentID, ids)
+	})
+}
+
 type ImportStats struct {
 	Folders      int `json:"folders"`
 	Transactions int `json:"transactions"`

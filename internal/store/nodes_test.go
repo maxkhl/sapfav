@@ -309,3 +309,65 @@ func TestImportRealExport(t *testing.T) {
 		t.Errorf("Umlaute: %q", title)
 	}
 }
+
+func TestSetOrder(t *testing.T) {
+	s := newStore(t)
+	f := mustCreate(t, s, nil, KindFolder, "", "F")
+	a := mustCreate(t, s, &f.ID, KindTx, "VA03", "a")
+	b := mustCreate(t, s, &f.ID, KindTx, "SE16", "b")
+	c := mustCreate(t, s, &f.ID, KindTx, "SM37", "c")
+	oben := mustCreate(t, s, nil, KindTx, "ST22", "oben")
+
+	if err := s.SetOrder(ctx, &f.ID, nil, []int64{c.ID, a.ID, b.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := order(t, s, &f.ID); !equal(got, []string{"c", "a", "b"}) {
+		t.Errorf("nach SetOrder: %v", got)
+	}
+
+	// Oberste Ebene von Allgemein.
+	if err := s.SetOrder(ctx, nil, nil, []int64{oben.ID, f.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := order(t, s, nil); !equal(got, []string{"oben", "F"}) {
+		t.Errorf("Allgemein: %v", got)
+	}
+
+	// Oberste Ebene eines Kunden, getrennt von Allgemein.
+	cust := mustCustomer(t, s, "ACME")
+	x := mustCreateIn(t, s, &cust.ID, nil, KindTx, "ZSD084", "x")
+	y := mustCreateIn(t, s, &cust.ID, nil, KindTx, "ZMM002", "y")
+	if err := s.SetOrder(ctx, nil, &cust.ID, []int64{y.ID, x.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if got := orderIn(t, s, &cust.ID, nil); !equal(got, []string{"y", "x"}) {
+		t.Errorf("Kunde: %v", got)
+	}
+	if got := order(t, s, nil); !equal(got, []string{"oben", "F"}) {
+		t.Errorf("Allgemein durch Kunden-SetOrder verändert: %v", got)
+	}
+
+	cases := []struct {
+		name     string
+		parent   *int64
+		customer *int64
+		ids      []int64
+		want     error
+	}{
+		{"zu wenige IDs", &f.ID, nil, []int64{a.ID, b.ID}, ErrInvalid},
+		{"doppelte ID", &f.ID, nil, []int64{a.ID, a.ID, b.ID}, ErrInvalid},
+		{"fremder Knoten", &f.ID, nil, []int64{a.ID, b.ID, oben.ID}, ErrInvalid},
+		{"anderer Bereich", nil, nil, []int64{x.ID, y.ID}, ErrInvalid},
+		{"Transaktion als Ordner", &a.ID, nil, []int64{}, ErrInvalid},
+		{"unbekannter Ordner", ptr[int64](999), nil, []int64{}, ErrInvalid},
+		{"unbekannter Kunde", nil, ptr[int64](999), []int64{}, ErrInvalid},
+	}
+	for _, c := range cases {
+		if err := s.SetOrder(ctx, c.parent, c.customer, c.ids); !errors.Is(err, c.want) {
+			t.Errorf("%s: err %v, want %v", c.name, err, c.want)
+		}
+	}
+	if got := order(t, s, &f.ID); !equal(got, []string{"c", "a", "b"}) {
+		t.Errorf("Reihenfolge nach Fehlversuchen verändert: %v", got)
+	}
+}
