@@ -290,48 +290,115 @@ const (
 	DeleteChildrenDelete = "delete"
 )
 
+// DeleteResult beschreibt, was ein Stapellöschen entfernt hat.
+type DeleteResult struct {
+	Deleted []int64 `json:"deleted"`
+	// AlreadyRemoved sind Knoten, die mit einem Vorfahren aus derselben
+	// Liste verschwunden sind, bevor sie selbst an der Reihe waren.
+	AlreadyRemoved []int64 `json:"already_removed"`
+}
+
 // Delete löscht einen Knoten. Bei nicht-leeren Ordnern muss children
 // "lift" (Inhalt an die Stelle des Ordners) oder "delete" sein.
 func (s *Store) Delete(ctx context.Context, id int64, children string) error {
-	if children != "" && children != DeleteChildrenLift && children != DeleteChildrenDelete {
-		return fmt.Errorf("%w: children muss 'lift' oder 'delete' sein", ErrInvalid)
-	}
-	return s.inTx(ctx, func(tx *sql.Tx) error {
-		n, err := getNode(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		kids, err := childIDs(ctx, tx, &id, nil)
-		if err != nil {
-			return err
-		}
-		if len(kids) > 0 && children == "" {
-			return fmt.Errorf("%w: Ordner ist nicht leer – Inhalt hochziehen oder mitlöschen?", ErrConflict)
-		}
+	_, err := s.DeleteMany(ctx, []int64{id}, children)
+	return err
+}
 
-		siblings, err := childIDs(ctx, tx, n.ParentID, n.CustomerID)
-		if err != nil {
-			return err
+// DeleteMany löscht mehrere Knoten in einer Transaktion: entweder alle oder
+// keiner. Erst werden alle IDs geprüft, damit ein einzelner Tippfehler nicht
+// die halbe Liste löscht.
+func (s *Store) DeleteMany(ctx context.Context, ids []int64, children string) (DeleteResult, error) {
+	var res DeleteResult
+	if children != "" && children != DeleteChildrenLift && children != DeleteChildrenDelete {
+		return res, fmt.Errorf("%w: children muss 'lift' oder 'delete' sein", ErrInvalid)
+	}
+	if len(ids) == 0 {
+		return res, fmt.Errorf("%w: keine IDs angegeben", ErrInvalid)
+	}
+	seen := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			return res, fmt.Errorf("%w: Knoten %d ist doppelt angegeben", ErrInvalid, id)
 		}
-		order := make([]int64, 0, len(siblings)+len(kids))
-		for _, sib := range siblings {
-			if sib != id {
-				order = append(order, sib)
-			} else if children == DeleteChildrenLift {
-				order = append(order, kids...)
-			}
-		}
-		if children == DeleteChildrenLift {
-			// Erst umhängen, damit ON DELETE CASCADE die Kinder nicht erfasst.
-			if err := setOrder(ctx, tx, n.ParentID, order); err != nil {
+		seen[id] = true
+	}
+
+	err := s.inTx(ctx, func(tx *sql.Tx) error {
+		res = DeleteResult{Deleted: []int64{}, AlreadyRemoved: []int64{}}
+		for _, id := range ids {
+			n, err := getNode(ctx, tx, id)
+			if err != nil {
 				return err
 			}
+			kids, err := childIDs(ctx, tx, &id, nil)
+			if err != nil {
+				return err
+			}
+			if len(kids) > 0 && children == "" {
+				return fmt.Errorf("%w: „%s“ (%d) ist ein nicht-leerer Ordner – Inhalt hochziehen oder mitlöschen?",
+					ErrConflict, n.Title, id)
+			}
 		}
-		if _, err := tx.ExecContext(ctx, "DELETE FROM nodes WHERE id = ?", id); err != nil {
-			return err
+		for _, id := range ids {
+			gone, err := deleteNode(ctx, tx, id, children)
+			if err != nil {
+				return err
+			}
+			if gone {
+				res.AlreadyRemoved = append(res.AlreadyRemoved, id)
+			} else {
+				res.Deleted = append(res.Deleted, id)
+			}
 		}
-		return renumber(ctx, tx, n.ParentID, n.CustomerID)
+		return nil
 	})
+	if err != nil {
+		return DeleteResult{}, err
+	}
+	return res, nil
+}
+
+// deleteNode entfernt einen Knoten innerhalb einer Transaktion. gone ist true,
+// wenn er schon weg war, weil ein Vorfahre vorher gelöscht wurde.
+func deleteNode(ctx context.Context, tx *sql.Tx, id int64, children string) (gone bool, err error) {
+	n, err := getNode(ctx, tx, id)
+	if errors.Is(err, ErrNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	kids, err := childIDs(ctx, tx, &id, nil)
+	if err != nil {
+		return false, err
+	}
+	if len(kids) > 0 && children == "" {
+		return false, fmt.Errorf("%w: Ordner ist nicht leer – Inhalt hochziehen oder mitlöschen?", ErrConflict)
+	}
+
+	siblings, err := childIDs(ctx, tx, n.ParentID, n.CustomerID)
+	if err != nil {
+		return false, err
+	}
+	order := make([]int64, 0, len(siblings)+len(kids))
+	for _, sib := range siblings {
+		if sib != id {
+			order = append(order, sib)
+		} else if children == DeleteChildrenLift {
+			order = append(order, kids...)
+		}
+	}
+	if children == DeleteChildrenLift {
+		// Erst umhängen, damit ON DELETE CASCADE die Kinder nicht erfasst.
+		if err := setOrder(ctx, tx, n.ParentID, order); err != nil {
+			return false, err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM nodes WHERE id = ?", id); err != nil {
+		return false, err
+	}
+	return false, renumber(ctx, tx, n.ParentID, n.CustomerID)
 }
 
 // Move hängt einen Knoten ans Ende des Ziels: eines Ordners (parentID) oder der

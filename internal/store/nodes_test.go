@@ -371,3 +371,69 @@ func TestSetOrder(t *testing.T) {
 		t.Errorf("Reihenfolge nach Fehlversuchen verändert: %v", got)
 	}
 }
+
+func idsEqual(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestDeleteMany(t *testing.T) {
+	s := newStore(t)
+	a := mustCreate(t, s, nil, KindTx, "SE16", "a")
+	f := mustCreate(t, s, nil, KindFolder, "", "F")
+	inner := mustCreate(t, s, &f.ID, KindTx, "ST22", "innen")
+	mustCreate(t, s, nil, KindTx, "SM37", "b")
+
+	// Fehler vor dem ersten Löschen: der Bestand bleibt unverändert.
+	cases := []struct {
+		name string
+		ids  []int64
+		mode string
+		want error
+	}{
+		{"unbekannte ID", []int64{a.ID, 999}, "", ErrNotFound},
+		{"nicht-leerer Ordner ohne Wahl", []int64{a.ID, f.ID}, "", ErrConflict},
+		{"doppelte ID", []int64{a.ID, a.ID}, "", ErrInvalid},
+		{"leere Liste", nil, "", ErrInvalid},
+		{"falsche Wahl", []int64{a.ID}, "irgendwas", ErrInvalid},
+	}
+	for _, c := range cases {
+		if _, err := s.DeleteMany(ctx, c.ids, c.mode); !errors.Is(err, c.want) {
+			t.Errorf("%s: err %v, want %v", c.name, err, c.want)
+		}
+	}
+	if got := order(t, s, nil); !equal(got, []string{"a", "F", "b"}) {
+		t.Fatalf("trotz Fehler gelöscht: %v", got)
+	}
+
+	// Ordner mit Inhalt, dessen Kind ebenfalls in der Liste steht.
+	res, err := s.DeleteMany(ctx, []int64{f.ID, inner.ID, a.ID}, DeleteChildrenDelete)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !idsEqual(res.Deleted, []int64{f.ID, a.ID}) || !idsEqual(res.AlreadyRemoved, []int64{inner.ID}) {
+		t.Errorf("%+v", res)
+	}
+	if got := order(t, s, nil); !equal(got, []string{"b"}) {
+		t.Errorf("nach Stapellöschen: %v", got)
+	}
+
+	// lift zieht den Inhalt an die Stelle des Ordners.
+	g := mustCreate(t, s, nil, KindFolder, "", "G")
+	mustCreate(t, s, &g.ID, KindTx, "VA03", "g1")
+	mustCreate(t, s, &g.ID, KindTx, "VA02", "g2")
+	letzte := mustCreate(t, s, nil, KindTx, "VA01", "letzte")
+	if _, err := s.DeleteMany(ctx, []int64{g.ID, letzte.ID}, DeleteChildrenLift); err != nil {
+		t.Fatal(err)
+	}
+	if got := order(t, s, nil); !equal(got, []string{"b", "g1", "g2"}) {
+		t.Errorf("nach lift: %v", got)
+	}
+}
