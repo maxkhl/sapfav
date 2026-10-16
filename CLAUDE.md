@@ -101,12 +101,15 @@ Ein Endpunkt `POST /mcp`, JSON-RPC 2.0, Antwort immer als einzelnes JSON-Objekt
 - **Fehler:** Was das Modell korrigieren kann (ungültige Argumente,
   `ErrInvalid`, `ErrNotFound`, `ErrConflict`), kommt als Tool-Ergebnis mit
   `isError: true` zurück; alles andere als JSON-RPC-Fehler `-32603`.
-- **Tools** (elf): lesend `list_customers`, `get_tree`, `search`; schreibend
-  `create_node`, `update_node` (nur mitgeschickte Felder), `move_node`,
-  `set_children_order`, `delete_node`; dazu die drei Kunden-Tools.
-  `set_children_order` sortiert eine ganze Ebene in einem Aufruf — mit
-  Hoch/Runter bräuchte ein Modell für 88 Einträge hunderte Aufrufe.
-  Import und SAP-Export sind bewusst **keine** Tools.
+- **Tools** (dreizehn): lesend `list_customers`, `get_tree`, `search`,
+  `find_duplicates`; schreibend `create_node`, `update_node` (nur mitgeschickte
+  Felder), `move_node`, `set_children_order`, `delete_node`, `delete_nodes`;
+  dazu die drei Kunden-Tools. Import und SAP-Export sind bewusst **keine** Tools.
+- **Stapel-Tools sind Absicht:** Clients fragen pro Werkzeugaufruf nach
+  Freigabe. `set_children_order` sortiert eine ganze Ebene in einem Aufruf,
+  `delete_nodes` löscht eine ganze Liste in einer Transaktion (alle oder
+  keiner). Einzelaufrufe für jeden Eintrag machen Aufräumen im Client
+  unbenutzbar. Neue Massenoperationen deshalb ebenfalls als ein Aufruf bauen.
 - **Absicherung:** `SAPFAV_MCP_TOKEN` schaltet den Endpunkt ein; ist er leer,
   wird `/mcp` nicht registriert. Vergleich in konstanter Zeit. Authentik Forward
   Auth kann hier nicht greifen (keine Browser-Anmeldung möglich), deshalb wird

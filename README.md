@@ -226,6 +226,8 @@ Mit `/mcp` in Claude Code prüfen, ob die Verbindung steht.
 | `move_node` | in einen anderen Ordner oder Bereich hängen |
 | `set_children_order` | Reihenfolge einer ganzen Ebene in einem Aufruf setzen |
 | `delete_node` | löschen, Ordnerinhalt hochziehen oder mitlöschen |
+| `delete_nodes` | mehrere Einträge in **einem** Aufruf löschen, in einer Transaktion |
+| `find_duplicates` | mehrfach vorkommende T-Codes gruppiert, mit Pfad je Eintrag |
 | `create_customer`, `update_customer`, `delete_customer` | Kundenverwaltung |
 
 Import und SAP-Export gibt es bewusst nicht als Tools; die laufen über die
@@ -234,7 +236,8 @@ Oberfläche.
 Beispiele, die damit funktionieren:
 
 - „Sortiere die oberste Ebene von Allgemein alphabetisch.“
-- „Welche Transaktionen habe ich doppelt? Räum die Dubletten auf.“
+- „Welche Transaktionen habe ich doppelt? Räum die Dubletten auf.“ — dafür gibt
+  es `find_duplicates` und `delete_nodes`
 - „Lege für Kunde X einen Ordner Logistik an und verschiebe alle VL-Transaktionen dorthin.“
 - „Ergänze bei SE16 eine Beschreibung, wofür ich das nutze.“
 
@@ -244,6 +247,10 @@ Beispiele, die damit funktionieren:
   eine Sicherung ziehen.
 - Dein Client fragt bei löschenden Tools nach, weil sie als destruktiv markiert
   sind. Das ist aber eine Zusage des Clients, keine Sperre im Server.
+- Claude Code fragt **pro Aufruf**. Beim Aufräumen deshalb `delete_nodes`
+  verwenden lassen: eine Freigabe für die ganze Liste statt einer je Eintrag.
+  Dauerhaft erlauben lässt sich ein Tool mit `/permissions` und einer Regel wie
+  `mcp__sapfav__delete_nodes`.
 - Token wechseln: Wert in `.env` ändern und neu starten. Danach den Connector
   bzw. den Eintrag in Claude Code neu anlegen.
 - Abschalten: `SAPFAV_MCP_TOKEN` leeren und neu starten.
